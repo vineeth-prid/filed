@@ -6,6 +6,7 @@ import Factsheet from "./pages/Factsheet";
 import Compare from "./pages/Compare";
 import Colleges from "./pages/Colleges";
 import Methodology from "./pages/Methodology";
+import Match from "./pages/Match";
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
           <Route path="/colleges" element={<Colleges />} />
           <Route path="/college/:id" element={<Factsheet />} />
           <Route path="/compare" element={<Compare />} />
+          <Route path="/match" element={<Match />} />
           <Route path="/methodology" element={<Methodology />} />
         </Routes>
       </BrowserRouter>
