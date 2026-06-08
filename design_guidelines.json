@@ -1,0 +1,89 @@
+{
+  "theme": "light",
+  "archetype": "4 (Swiss & High-Contrast)",
+  "brand_name": "Filed",
+  "design_philosophy": "Premium, Trustworthy, Analytical, Modern, Financial-report style. A regulated financial research platform applied to higher education.",
+  "color_palette": {
+    "background": "#F8FAFC",
+    "surface": "#FFFFFF",
+    "primary": "#0B1528",
+    "primary_foreground": "#FFFFFF",
+    "secondary": "#64748B",
+    "secondary_foreground": "#F8FAFC",
+    "positive": "#059669",
+    "neutral": "#4682B4",
+    "warning": "#D97706",
+    "border": "#E2E8F0",
+    "text_primary": "#0B1528",
+    "text_secondary": "#475569"
+  },
+  "typography": {
+    "font_families": {
+      "heading": "Manrope, sans-serif",
+      "body": "Inter, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-bold",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-bold",
+      "h3": "text-xl sm:text-2xl tracking-tight font-semibold",
+      "h4": "text-lg sm:text-xl font-semibold",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm",
+      "overline": "text-xs tracking-[0.2em] uppercase font-bold text-secondary"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Swiss Grid, High Density for Data, Ample Spacing for Marketing.",
+    "container": "max-w-7xl mx-auto px-6 sm:px-8 lg:px-12",
+    "section_gap": "py-24 md:py-32",
+    "grid_bento": "grid grid-cols-1 md:grid-cols-12 gap-6",
+    "grid_dashboard": "grid grid-cols-1 md:grid-cols-4 gap-4"
+  },
+  "surface_strategies": {
+    "cards": "bg-surface border border-border rounded-none sm:rounded-md shadow-sm",
+    "factsheet": "border-collapse style layout, visible grid lines separating metrics, minimalist.",
+    "inputs": "bg-transparent border-b border-border rounded-none focus:ring-0 focus:border-primary"
+  },
+  "motion_and_interactions": {
+    "hover": "transition-colors duration-200 ease-in-out hover:border-primary",
+    "focus": "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+    "animations": "Subtle stagger on list items, smooth scroll for navigation."
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "weight": "regular"
+  },
+  "media_and_images": {
+    "hero_background": {
+      "type": "custom_ui",
+      "description": "Animated intelligence dashboard background with floating cards showing Outcome Scores, Transparency Ratings, Placement Trends, and ROI Metrics."
+    },
+    "image_urls": [
+      {
+        "url": "https://images.pexels.com/photos/17483870/pexels-photo-17483870.png?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "abstract_data",
+        "description": "Abstract data visualization for Insight Engine background or deep tech sections."
+      }
+    ]
+  },
+  "component_instructions": {
+    "hero": "Hero section must feature a bold, text-heavy value proposition on the left (Make One Of Life's Biggest Investments With Better Data) and an animated, abstract dashboard UI on the right.",
+    "decision_gap_story": "Interactive visual story. Side-by-side comparison of 'Advertised' vs 'Actual Filings'. Use strict, neutral terminology. No accusatory language.",
+    "market_landscape": "Large, interactive Recharts scatter plot. X=Total Cost, Y=Median Graduate Outcome. Bubble size=Student Strength, Bubble color (Primary vs Positive vs Warning)=Transparency Rating.",
+    "intelligence_categories": "Bento grid of 6 cards. High-contrast typography. Each card highlights a specific metric (Best ROI, Strongest Outcomes, etc.).",
+    "factsheet_preview": "Design like a Morningstar mutual fund factsheet. Dense, multi-column grid, highly structured. Include source badges (Government Filing, Accreditation Report).",
+    "disclosure_comparison": "Table format. Left column: Advertised Information. Right column: Regulatory Disclosure. Status badge: Variance Indicator (Low/Moderate/High).",
+    "comparison_engine": "Side-by-side data table comparing up to 4 institutions. Lock the first column (metrics).",
+    "insight_engine": "AI-generated observation panel. Use monospace font for the 'AI generation' effect. Financial-research-style text.",
+    "methodology": "Footer-adjacent section with a transparent breakdown of data sources (NIRF, NAAC, etc.) and buttons to view methodology.",
+    "testing": "All interactive and key informational elements MUST include a data-testid attribute in kebab-case."
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the color palette. Do NOT introduce new colors. Use Tailwind arbitrary values if necessary.",
+    "Ensure the UI feels like a Bloomberg terminal or Morningstar report, NOT a flashy consumer app.",
+    "Use Recharts for all data visualizations (Scatter Plot, Bar Charts).",
+    "Build the Factsheet page and Comparison page as distinct, high-fidelity views.",
+    "Avoid typical card shadows. Rely on 1px borders and typography for hierarchy."
+  ]
+}
