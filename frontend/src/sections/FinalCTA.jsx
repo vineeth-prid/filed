@@ -22,21 +22,21 @@ export default function FinalCTA() {
               </span>
             </h2>
             <p className="mt-8 max-w-xl text-base text-white/70 leading-relaxed">
-              Explore colleges using structured, transparent and explainable data. Built for students, parents, counsellors and consultants who treat education like the investment it is.
+              Look at colleges the way you{"\u2019"}d look at any big family decision — with the real numbers in front of you. Built for students, parents, counsellors and consultants.
             </p>
           </div>
 
           <div className="lg:col-span-5 flex flex-col gap-3">
             <Link to="/colleges" data-testid="final-explore-btn" className="group flex items-center justify-between gap-4 h-16 px-6 bg-emerald2 hover:bg-emerald2/90 transition-colors text-navy">
-              <span className="font-heading font-bold text-base">Explore Institutions</span>
+              <span className="font-heading font-bold text-base">Browse colleges</span>
               <ArrowUpRight className="w-5 h-5 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
             </Link>
             <Link to="/compare" data-testid="final-compare-btn" className="group flex items-center justify-between gap-4 h-16 px-6 bg-white hover:bg-white/90 transition-colors text-navy">
-              <span className="font-heading font-bold text-base">Compare Colleges</span>
+              <span className="font-heading font-bold text-base">Compare side by side</span>
               <ArrowUpRight className="w-5 h-5 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
             </Link>
             <button data-testid="final-early-access-btn" className="group flex items-center justify-between gap-4 h-16 px-6 border border-white/30 hover:border-emerald2 transition-colors text-white">
-              <span className="font-heading font-bold text-base">Join Early Access</span>
+              <span className="font-heading font-bold text-base">Get early access</span>
               <ArrowUpRight className="w-5 h-5 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
             </button>
           </div>

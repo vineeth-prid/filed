@@ -8,10 +8,10 @@ import { Search, ArrowUpRight } from "lucide-react";
 
 const TYPES = ["All", "Public", "Private"];
 const SORTS = [
-  { key: "outcomeScore", label: "Outcome Score" },
-  { key: "transparency", label: "Transparency" },
-  { key: "medianSalary", label: "Median Salary" },
-  { key: "cost", label: "Estimated Cost" },
+  { key: "outcomeScore", label: "Career Success" },
+  { key: "transparency", label: "Openness" },
+  { key: "medianSalary", label: "Typical Salary" },
+  { key: "cost", label: "What You'll Spend" },
 ];
 
 export default function Colleges() {
@@ -35,9 +35,9 @@ export default function Colleges() {
       <Navbar />
       <main className="max-w-[1400px] mx-auto px-6 sm:px-8 lg:px-12 py-12">
         <div className="mb-8">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-slate2 font-semibold mb-3 font-mono">Institutions · 16 Indexed</div>
-          <h1 className="font-heading text-4xl sm:text-5xl tracking-tighter font-bold">Institution Browser</h1>
-          <p className="mt-3 text-sm text-slate2 max-w-2xl">All publicly disclosed institutional metrics, filterable and sortable. Click any row to open its factsheet.</p>
+          <div className="text-[10px] uppercase tracking-[0.22em] text-slate2 font-semibold mb-3 font-mono">All Colleges · 16 Indexed</div>
+          <h1 className="font-heading text-4xl sm:text-5xl tracking-tighter font-bold">Every college, all the numbers.</h1>
+          <p className="mt-3 text-sm text-slate2 max-w-2xl">All 16 colleges with every public number we have. Click any row to open its full snapshot.</p>
         </div>
 
         {/* Controls */}
@@ -48,7 +48,7 @@ export default function Colleges() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               data-testid="colleges-search"
-              placeholder="Search by name, city or state"
+              placeholder="Search any college, course or city"
               className="flex-1 bg-transparent outline-none text-sm"
             />
           </div>
@@ -83,7 +83,7 @@ export default function Colleges() {
           <table className="w-full min-w-[900px]">
             <thead>
               <tr className="bg-navy text-white">
-                {["Institution", "City", "Type", "Outcome", "Placement", "Median Salary", "Cost", "Transparency", ""].map((h) => (
+                {["College", "City", "Type", "Career Success", "Got Jobs", "Typical Salary", "You'll Spend", "Openness", ""].map((h) => (
                   <th key={h} className="text-left px-4 py-3 text-[10px] uppercase tracking-[0.16em] font-mono font-semibold">{h}</th>
                 ))}
               </tr>
@@ -112,7 +112,7 @@ export default function Colleges() {
                 </tr>
               ))}
               {!rows.length && (
-                <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-slate2">No institutions match.</td></tr>
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-slate2">No colleges match your search.</td></tr>
               )}
             </tbody>
           </table>

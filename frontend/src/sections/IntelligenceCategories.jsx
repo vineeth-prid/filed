@@ -19,14 +19,14 @@ export default function IntelligenceCategories() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-end mb-12">
           <div className="lg:col-span-7">
             <div className="text-[10px] uppercase tracking-[0.22em] text-white/50 font-semibold mb-3">
-              <span className="font-mono">04</span> · Intelligence Categories
+              <span className="font-mono">04</span> · Six Easy Ways To Look At A College
             </div>
             <h2 className="font-heading text-3xl sm:text-4xl lg:text-5xl tracking-tighter font-bold leading-[1.05]">
-              Six lenses on every<br />institution.
+              Six lenses on every<br />college.
             </h2>
           </div>
           <div className="lg:col-span-5 text-sm text-white/60 leading-relaxed">
-            Categories are computed from filed disclosures. Every figure links to a primary source.
+            We{"\u2019"}ve grouped colleges by what families actually want to know. Every list links back to its source.
           </div>
         </div>
 

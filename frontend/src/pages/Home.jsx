@@ -5,7 +5,9 @@ import DecisionGap from "../sections/DecisionGap";
 import MarketLandscape from "../sections/MarketLandscape";
 import IntelligenceCategories from "../sections/IntelligenceCategories";
 import FactsheetPreview from "../sections/FactsheetPreview";
+import StudentJourney from "../sections/StudentJourney";
 import DisclosureComparison from "../sections/DisclosureComparison";
+import ParentQuestions from "../sections/ParentQuestions";
 import ComparisonEngine from "../sections/ComparisonEngine";
 import InsightEngine from "../sections/InsightEngine";
 import Methodology from "../sections/Methodology";
@@ -21,7 +23,9 @@ export default function Home() {
         <MarketLandscape />
         <IntelligenceCategories />
         <FactsheetPreview />
+        <StudentJourney />
         <DisclosureComparison />
+        <ParentQuestions />
         <ComparisonEngine />
         <InsightEngine />
         <Methodology />

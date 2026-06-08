@@ -9,11 +9,11 @@ const API = `${BACKEND_URL}/api`;
 
 const DEFAULT_PICKS = ["iit-bombay", "iim-ahmedabad", "bits-pilani", "jnu"];
 const FALLBACK_INSIGHTS = [
-  "IIT Bombay and IIM Ahmedabad deliver comparable median outcomes, but IIM Ahmedabad does so at roughly 3.1x the estimated total cost.",
-  "BITS Pilani's higher-studies cohort (22%) sits below peer engineering institutes, suggesting a placement-led outcome profile.",
-  "JNU reports a 54% higher-studies cohort — the highest in the comparison set — consistent with its research-heavy academic mix.",
-  "Across the four institutions, transparency scores diverge by 28 points, indicating uneven reporting completeness rather than uneven quality.",
-  "Cost-adjusted outcomes favour public Institutes of National Importance, with JNU showing the strongest ratio of median outcome to estimated cost.",
+  "You could spend 40% less at IIT Bombay and still get similar career outcomes as IIM Ahmedabad.",
+  "More students from JNU continue their studies than take jobs immediately — its strength is research and academia.",
+  "Graduates from IIT Bombay typically earn more than students from similar engineering colleges.",
+  "BITS Pilani charges more than the IITs but its typical salary is lower — worth weighing carefully.",
+  "JNU offers the lowest cost in this comparison with strong further-studies outcomes — a strong public-college pick.",
 ];
 
 export default function InsightEngine() {
@@ -34,7 +34,7 @@ export default function InsightEngine() {
       const { data } = await axios.post(`${API}/insights`, { colleges: selected });
       if (data?.insights?.length) setInsights(data.insights);
     } catch (e) {
-      setError("Unable to reach the analyst service. Showing cached observations.");
+      setError("We couldn't reach our analyst right now. Showing cached observations.");
       setInsights(FALLBACK_INSIGHTS);
     } finally {
       setLoading(false);
@@ -48,14 +48,14 @@ export default function InsightEngine() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-10 items-end">
           <div className="lg:col-span-7">
             <div className="text-[10px] uppercase tracking-[0.22em] text-slate2 font-semibold mb-3">
-              <span className="font-mono">08</span> · Insight Engine
+              <span className="font-mono">08</span> · Insights Written For Families
             </div>
             <h2 className="font-heading text-3xl sm:text-4xl lg:text-5xl tracking-tighter font-bold text-navy leading-[1.05]">
-              Research notes, generated.<br />Sourced, comparable, neutral.
+              We{"\u2019"}ll point out the<br />things worth noticing.
             </h2>
           </div>
           <div className="lg:col-span-5 text-sm text-slate2 leading-relaxed">
-            The Insight Engine produces investment-research-style observations from the underlying filed metrics. Every observation is comparative — never accusatory.
+            Pick a few colleges and we{"\u2019"}ll tell you what stands out — in plain English. Every observation comes straight from the numbers.
           </div>
         </div>
 
@@ -63,7 +63,7 @@ export default function InsightEngine() {
           {/* Picker */}
           <div className="lg:col-span-4 border border-border bg-white">
             <div className="border-b border-border px-4 py-3 bg-navy text-white">
-              <div className="text-[10px] uppercase tracking-[0.2em] font-mono font-semibold">Universe · Select up to 5</div>
+              <div className="text-[10px] uppercase tracking-[0.2em] font-mono font-semibold">Pick up to 5 colleges</div>
             </div>
             <div className="max-h-[420px] overflow-y-auto">
               {colleges.map((c) => {
@@ -109,9 +109,9 @@ export default function InsightEngine() {
             <div className="border-b border-white/10 px-5 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="dot bg-emerald2 animate-pulse-line" />
-                <span className="text-[10px] uppercase tracking-[0.2em] font-mono font-semibold">Filed Analyst · Research Notes</span>
+                <span className="text-[10px] uppercase tracking-[0.2em] font-mono font-semibold">Filed Analyst · What We{"\u2019"}re Seeing</span>
               </div>
-              <span className="text-[10px] font-mono text-white/40">CLAUDE SONNET 4.5 · NEUTRAL TONE</span>
+              <span className="text-[10px] font-mono text-white/40">WRITTEN FOR FAMILIES</span>
             </div>
 
             <div className="p-6 sm:p-8 space-y-5 min-h-[380px]">
@@ -123,16 +123,16 @@ export default function InsightEngine() {
               {insights.map((line, i) => (
                 <div key={i} className="flex gap-4 animate-fade-up" style={{ animationDelay: `${i * 100}ms` }}>
                   <div className="flex-shrink-0">
-                    <div className="font-mono text-[10px] uppercase tracking-wider text-emerald2 mb-1">OBS · {String(i + 1).padStart(2, "0")}</div>
+                    <div className="font-mono text-[10px] uppercase tracking-wider text-emerald2 mb-1">No. {String(i + 1).padStart(2, "0")}</div>
                     <div className="w-0.5 h-full bg-emerald2/20" />
                   </div>
-                  <p className="text-sm text-white/90 leading-relaxed font-mono">{line}</p>
+                  <p className="text-sm text-white/90 leading-relaxed">{line}</p>
                 </div>
               ))}
             </div>
 
             <div className="border-t border-white/10 px-5 py-3 flex items-center justify-between text-[10px] font-mono text-white/40 uppercase tracking-wider">
-              <span>Observations are comparative · Always review primary sources</span>
+              <span>Every observation comes from the numbers · Always read the source documents</span>
               <span>{insights.length} NOTES</span>
             </div>
           </div>

@@ -28,10 +28,10 @@ export default function Navbar() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-8">
-            <Link to="/colleges" className={linkCls("/colleges")} data-testid="nav-colleges">Institutions</Link>
+            <Link to="/colleges" className={linkCls("/colleges")} data-testid="nav-colleges">Colleges</Link>
             <Link to="/compare" className={linkCls("/compare")} data-testid="nav-compare">Compare</Link>
-            <Link to="/methodology" className={linkCls("/methodology")} data-testid="nav-methodology">Methodology</Link>
-            <a href="#disclosure" className="text-sm tracking-tight text-slate2 hover:text-navy">Disclosure</a>
+            <Link to="/methodology" className={linkCls("/methodology")} data-testid="nav-methodology">How We Calculate</Link>
+            <a href="#disclosure" className="text-sm tracking-tight text-slate2 hover:text-navy">Marketing vs Reported</a>
           </nav>
 
           <div className="flex items-center gap-3">
@@ -40,7 +40,7 @@ export default function Navbar() {
               className="hidden sm:flex items-center gap-2 px-3 h-9 border border-border bg-white text-xs text-slate2 hover:border-navy transition-colors"
             >
               <Search className="w-3.5 h-3.5" />
-              <span>Search institutions</span>
+              <span>Search any college</span>
               <kbd className="ml-3 px-1.5 py-0.5 text-[10px] font-mono border border-border bg-offwhite text-slate2">⌘K</kbd>
             </button>
             <Link
@@ -48,7 +48,7 @@ export default function Navbar() {
               data-testid="nav-cta"
               className="h-9 px-4 bg-navy text-white text-xs tracking-wide flex items-center hover:bg-navy-700 transition-colors"
             >
-              Open Intelligence
+              Compare colleges
             </Link>
           </div>
         </div>

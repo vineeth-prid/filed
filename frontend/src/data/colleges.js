@@ -413,9 +413,9 @@ export const formatINR = (n) => {
 };
 
 export const transparencyBand = (t) => {
-  if (t >= 80) return { label: "High", color: "#059669", bg: "rgba(5,150,105,0.08)" };
-  if (t >= 65) return { label: "Moderate", color: "#4682B4", bg: "rgba(70,130,180,0.08)" };
-  return { label: "Low", color: "#D97706", bg: "rgba(217,119,6,0.08)" };
+  if (t >= 80) return { label: "Very Open", color: "#059669", bg: "rgba(5,150,105,0.08)" };
+  if (t >= 65) return { label: "Somewhat Open", color: "#4682B4", bg: "rgba(70,130,180,0.08)" };
+  return { label: "Less Open", color: "#D97706", bg: "rgba(217,119,6,0.08)" };
 };
 
 export const variance = (a, b) => {
@@ -424,7 +424,7 @@ export const variance = (a, b) => {
 };
 
 export const varianceBand = (v) => {
-  if (v < 15) return { label: "Low Variance", color: "#059669", bg: "rgba(5,150,105,0.08)" };
-  if (v < 40) return { label: "Moderate Variance", color: "#4682B4", bg: "rgba(70,130,180,0.08)" };
-  return { label: "High Variance", color: "#D97706", bg: "rgba(217,119,6,0.08)" };
+  if (v < 15) return { label: "Small Gap", color: "#059669", bg: "rgba(5,150,105,0.08)" };
+  if (v < 40) return { label: "Some Gap", color: "#4682B4", bg: "rgba(70,130,180,0.08)" };
+  return { label: "Big Gap", color: "#D97706", bg: "rgba(217,119,6,0.08)" };
 };

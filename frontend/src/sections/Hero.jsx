@@ -42,22 +42,21 @@ export default function Hero() {
           </div>
 
           <h1 className="mt-8 font-heading text-[44px] sm:text-[58px] lg:text-[76px] leading-[1.02] tracking-tighter font-bold text-navy animate-fade-up" style={{ animationDelay: "120ms" }}>
-            {"Make one of life\u2019s"}<br />
-            biggest investments<br />
+            Choosing a college<br />
+            shouldn{"\u2019"}t feel like<br />
             <span className="relative inline-block">
-              with{" "}
               <span className="relative">
-                better
+                guesswork
                 <svg className="absolute -bottom-2 left-0 w-full" height="14" viewBox="0 0 200 14" fill="none">
                   <path d="M2 9 Q 60 1, 100 7 T 198 6" stroke="#059669" strokeWidth="3" strokeLinecap="round" className="animate-draw" />
                 </svg>
-              </span>{" "}
-              data.
+              </span>
+              .
             </span>
           </h1>
 
           <p className="mt-10 max-w-xl text-base lg:text-lg text-slate2 leading-relaxed animate-fade-up" style={{ animationDelay: "240ms" }}>
-            Compare colleges using publicly disclosed placement outcomes, fee structures, accreditation data, and institutional filings. Built like a research terminal — not a marketing brochure.
+            See what students actually achieved after graduation, how much colleges cost, and whether they{"\u2019"}re worth it. Pulled from public filings, written for families.
           </p>
 
           {/* Search bar */}
@@ -66,7 +65,7 @@ export default function Hero() {
               <span className="px-3 text-[10px] uppercase tracking-[0.2em] text-slate2 font-semibold border-r border-border">Search</span>
               <input
                 type="text"
-                placeholder="Colleges, courses, careers or locations"
+                placeholder="Search any college, course or city"
                 data-testid="hero-search-input"
                 className="flex-1 px-4 h-full bg-transparent outline-none text-sm placeholder:text-slate2/60"
               />
@@ -88,9 +87,9 @@ export default function Hero() {
           </div>
 
           <div className="mt-12 grid grid-cols-3 gap-6 max-w-xl animate-fade-up" style={{ animationDelay: "520ms" }}>
-            <Stat n="16" l="Institutions Indexed" />
-            <Stat n="48+" l="Filed Metrics / College" />
-            <Stat n="100%" l="Sources Attributed" />
+            <Stat n="16" l="Colleges Indexed" />
+            <Stat n="48+" l="Data Points Per College" />
+            <Stat n="100%" l="Sources Cited" />
           </div>
         </div>
 
@@ -128,7 +127,7 @@ function HeroDashboard() {
       <div className="p-5 space-y-4">
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] uppercase tracking-[0.18em] text-slate2 font-semibold">Outcome Score · Top 5</span>
+            <span className="text-[10px] uppercase tracking-[0.18em] text-slate2 font-semibold">Career Success · Top 5</span>
             <span className="text-[10px] font-mono text-slate2">NIRF 2024</span>
           </div>
           <div className="space-y-1.5">
@@ -173,9 +172,9 @@ function HeroDashboard() {
 
         {/* KPI grid */}
         <div className="border-t border-border pt-4 grid grid-cols-3 gap-3">
-          <Kpi label="ROI Rated" v="AAA" sub="14 inst." color="#059669" />
-          <Kpi label="Avg Transparency" v="74" sub="↑ 3.2" color="#0B1528" />
-          <Kpi label="Variance High" v="6" sub="institutions" color="#D97706" />
+          <Kpi label="Value For Money" v="AAA" sub="14 colleges" color="#059669" />
+          <Kpi label="Avg. Openness" v="74" sub="↑ 3.2" color="#0B1528" />
+          <Kpi label="Big Marketing Gap" v="6" sub="colleges" color="#D97706" />
         </div>
       </div>
 

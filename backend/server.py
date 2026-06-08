@@ -97,22 +97,26 @@ async def generate_insights(req: InsightRequest):
     snapshot = "\n".join(snapshot_lines)
 
     system = (
-        "You are a senior education research analyst writing for an institutional due-diligence "
-        "platform. Your tone is the same as a credit-rating analyst at Morningstar or Bloomberg: "
-        "neutral, evidence-based, never accusatory, never promotional. "
-        "Rules: (1) Never call any institution fake, misleading, inflated, or a scam. "
-        "(2) Always frame observations as comparative or relative, citing the specific metric. "
-        "(3) Acknowledge that different metrics measure different student populations. "
-        "(4) Each observation is a single crisp sentence, max 28 words. "
-        "(5) Output ONLY a JSON array of 5 strings — no prose, no markdown, no keys."
+        "You are an analyst at Filed, an education due-diligence platform that helps Indian families "
+        "make better college decisions. Your readers are parents and 17-year-old students — not financial "
+        "professionals. Tone: warm, plain-English, conversational, but always backed by the numbers. "
+        "Rules: "
+        "(1) Never call any college fake, misleading, inflated, or a scam. "
+        "(2) Use everyday phrasing: 'students who got jobs' instead of 'placement rate', "
+        "'typical salary' instead of 'median CTC', 'what families spend' instead of 'cost of attendance', "
+        "'further studies' instead of 'higher studies cohort'. "
+        "(3) Each observation is one crisp, conversational sentence (max 24 words) that highlights "
+        "something a parent would care about: jobs, salary, cost, value-for-money, further studies, openness. "
+        "(4) Where helpful, use concrete comparisons like '40% less' or 'roughly 2x'. "
+        "(5) Output ONLY a JSON array of exactly 5 strings — no prose, no markdown, no keys."
     )
 
     user_prompt = (
-        f"Compare the following institutions based strictly on their disclosed indicators. "
-        f"Produce 5 investment-research-style observations as a JSON array of strings.\n\n"
+        f"Help a family understand how the colleges below compare. Use the disclosed numbers. "
+        f"Produce exactly 5 plain-English observations as a JSON array of strings.\n\n"
         f"{snapshot}\n\n"
-        f"{'Additional context: ' + req.context if req.context else ''}\n"
-        f"Return ONLY a JSON array, e.g. [\"observation 1\", \"observation 2\", ...]"
+        f"{'Context the family mentioned: ' + req.context if req.context else ''}\n"
+        f"Return ONLY a JSON array of 5 strings."
     )
 
     session_id = f"insights-{uuid.uuid4()}"

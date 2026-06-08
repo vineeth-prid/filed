@@ -12,29 +12,29 @@ export default function ComparisonEngine() {
   const selected = ids.map((id) => colleges.find((c) => c.id === id)).filter(Boolean);
 
   const metrics = [
-    { key: "outcomeScore", label: "Outcome Score", format: (v) => v },
-    { key: "roiRating", label: "ROI Rating", format: (v) => v, isText: true },
-    { key: "placementRate", label: "Placement Rate", format: (v) => `${v}%` },
-    { key: "medianSalary", label: "Median Salary", format: formatINR },
-    { key: "higherStudies", label: "Higher Studies", format: (v) => `${v}%` },
-    { key: "facultyRatio", label: "Faculty Ratio", format: (v) => v, isText: true },
-    { key: "transparency", label: "Transparency", format: (v) => v },
-    { key: "research", label: "Research Indicator", format: (v) => v },
-    { key: "cost", label: "Est. Cost of Attendance", format: formatINR },
+    { key: "outcomeScore", label: "Career Success", format: (v) => v },
+    { key: "roiRating", label: "Value For Money", format: (v) => v, isText: true },
+    { key: "placementRate", label: "Students Who Got Jobs", format: (v) => `${v}%` },
+    { key: "medianSalary", label: "Typical Salary", format: formatINR },
+    { key: "higherStudies", label: "Chose Further Studies", format: (v) => `${v}%` },
+    { key: "facultyRatio", label: "Student-To-Teacher Ratio", format: (v) => v, isText: true },
+    { key: "transparency", label: "Openness", format: (v) => v },
+    { key: "research", label: "Research & Innovation", format: (v) => v },
+    { key: "cost", label: "What You'll Spend", format: formatINR },
   ];
 
   const remaining = colleges.filter((c) => !ids.includes(c.id));
 
   return (
-    <section className="border-b border-border bg-offwhite">
+    <section id="comparison-engine" className="border-b border-border bg-offwhite">
       <div className="max-w-[1400px] mx-auto px-6 sm:px-8 lg:px-12 py-24 lg:py-32">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-end mb-10">
           <div className="lg:col-span-7">
             <div className="text-[10px] uppercase tracking-[0.22em] text-slate2 font-semibold mb-3">
-              <span className="font-mono">07</span> · Comparison Engine
+              <span className="font-mono">07</span> · Put Colleges Side By Side
             </div>
             <h2 className="font-heading text-3xl sm:text-4xl lg:text-5xl tracking-tighter font-bold text-navy leading-[1.05]">
-              Side by side, on what<br />actually matters.
+              See up to four colleges<br />on the same page.
             </h2>
           </div>
           <div className="lg:col-span-5 flex justify-start lg:justify-end">
@@ -119,7 +119,7 @@ function AddPicker({ remaining, onAdd }) {
         onClick={() => setOpen((o) => !o)}
         className="inline-flex items-center gap-2 text-xs text-white border border-white/20 hover:border-emerald2 hover:text-emerald2 px-3 h-8"
       >
-        <Plus className="w-3 h-3" /> Add institution
+        <Plus className="w-3 h-3" /> Add a college
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-2 w-64 max-h-72 overflow-y-auto bg-white border border-navy shadow-xl z-20">

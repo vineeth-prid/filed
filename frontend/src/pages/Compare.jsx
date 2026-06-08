@@ -27,17 +27,17 @@ export default function Compare() {
   const remaining = colleges.filter((c) => !ids.includes(c.id));
 
   const metrics = [
-    { key: "outcomeScore", label: "Outcome Score", format: (v) => v },
-    { key: "roiRating", label: "ROI Rating", format: (v) => v, isText: true },
-    { key: "placementRate", label: "Placement Rate", format: (v) => `${v}%` },
-    { key: "medianSalary", label: "Median Salary", format: formatINR },
-    { key: "higherStudies", label: "Higher Studies", format: (v) => `${v}%` },
-    { key: "facultyRatio", label: "Faculty Ratio", format: (v) => v, isText: true },
-    { key: "transparency", label: "Transparency", format: (v) => v },
-    { key: "research", label: "Research", format: (v) => v },
-    { key: "diversity", label: "Diversity", format: (v) => v },
-    { key: "cost", label: "Est. Cost of Attendance", format: formatINR, lowerBetter: true },
-    { key: "students", label: "Student Strength", format: (v) => v.toLocaleString("en-IN") },
+    { key: "outcomeScore", label: "Career Success", format: (v) => v },
+    { key: "roiRating", label: "Value For Money", format: (v) => v, isText: true },
+    { key: "placementRate", label: "Students Who Got Jobs", format: (v) => `${v}%` },
+    { key: "medianSalary", label: "Typical Salary", format: formatINR },
+    { key: "higherStudies", label: "Chose Further Studies", format: (v) => `${v}%` },
+    { key: "facultyRatio", label: "Student-To-Teacher Ratio", format: (v) => v, isText: true },
+    { key: "transparency", label: "Openness", format: (v) => v },
+    { key: "research", label: "Research & Innovation", format: (v) => v },
+    { key: "diversity", label: "Student Mix", format: (v) => v },
+    { key: "cost", label: "What You'll Spend", format: formatINR, lowerBetter: true },
+    { key: "students", label: "Students Enrolled", format: (v) => v.toLocaleString("en-IN") },
   ];
 
   const runInsights = async () => {
@@ -58,9 +58,9 @@ export default function Compare() {
       <main className="max-w-[1400px] mx-auto px-6 sm:px-8 lg:px-12 py-12">
         <div className="mb-8 flex items-end justify-between flex-wrap gap-4">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.22em] text-slate2 font-semibold mb-3 font-mono">Comparison Terminal</div>
-            <h1 className="font-heading text-4xl sm:text-5xl tracking-tighter font-bold">Compare up to four institutions.</h1>
-            <p className="mt-3 text-sm text-slate2 max-w-2xl">Best value per metric is highlighted. Click any metric label to focus.</p>
+            <div className="text-[10px] uppercase tracking-[0.22em] text-slate2 font-semibold mb-3 font-mono">Compare Colleges</div>
+            <h1 className="font-heading text-4xl sm:text-5xl tracking-tighter font-bold">Put up to four colleges side by side.</h1>
+            <p className="mt-3 text-sm text-slate2 max-w-2xl">The best value on each row is highlighted in green. Click a metric name to focus on it.</p>
           </div>
           <button
             onClick={runInsights}
@@ -68,7 +68,7 @@ export default function Compare() {
             data-testid="compare-insights-btn"
             className="inline-flex items-center gap-2 h-11 px-5 bg-navy text-white text-xs tracking-wide hover:bg-navy-700 disabled:opacity-40"
           >
-            {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Analysing…</> : <><Sparkles className="w-3.5 h-3.5" /> Generate Observations</>}
+            {loading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Reading the numbers…</> : <><Sparkles className="w-3.5 h-3.5" /> Show me what stands out</>}
           </button>
         </div>
 
@@ -78,15 +78,15 @@ export default function Compare() {
             <div className="border-b border-white/10 px-5 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="dot bg-emerald2 animate-pulse-line" />
-                <span className="text-[10px] uppercase tracking-[0.2em] font-mono font-semibold">Filed Analyst · Research Notes</span>
+                <span className="text-[10px] uppercase tracking-[0.2em] font-mono font-semibold">Filed Analyst · What We{"\u2019"}re Seeing</span>
               </div>
-              <span className="text-[10px] font-mono text-white/40">CLAUDE SONNET 4.5</span>
+              <span className="text-[10px] font-mono text-white/40">WRITTEN FOR FAMILIES</span>
             </div>
             <div className="p-6 space-y-4">
               {insights.map((line, i) => (
                 <div key={i} className="flex gap-4 animate-fade-up" style={{ animationDelay: `${i * 80}ms` }}>
-                  <div className="font-mono text-[10px] uppercase tracking-wider text-emerald2 flex-shrink-0 w-12">OBS {String(i + 1).padStart(2, "0")}</div>
-                  <p className="text-sm text-white/90 leading-relaxed font-mono">{line}</p>
+                  <div className="font-mono text-[10px] uppercase tracking-wider text-emerald2 flex-shrink-0 w-12">No. {String(i + 1).padStart(2, "0")}</div>
+                  <p className="text-sm text-white/90 leading-relaxed">{line}</p>
                 </div>
               ))}
             </div>
@@ -154,7 +154,7 @@ export default function Compare() {
         </div>
 
         <div className="mt-6 text-xs text-slate2 leading-relaxed border-l-2 border-steel pl-4">
-          <span className="font-semibold text-navy">Note:</span> {"\u201CBest\u201D"} is determined relative to the selected institution set on this metric. It is not an absolute ranking. Always review primary sources.
+          <span className="font-semibold text-navy">A small note:</span> {"\u201C"}Best{"\u201D"} is only relative to the colleges you{"\u2019"}re comparing on this metric — not an overall ranking. Always read the source documents.
         </div>
       </main>
       <Footer />
@@ -171,7 +171,7 @@ function Picker({ remaining, onAdd }) {
         data-testid="compare-add-btn"
         className="inline-flex items-center gap-2 text-xs text-white border border-white/30 hover:border-emerald2 hover:text-emerald2 px-3 h-8"
       >
-        <Plus className="w-3 h-3" /> Add institution
+        <Plus className="w-3 h-3" /> Add a college
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-2 w-64 max-h-72 overflow-y-auto bg-white border border-navy shadow-xl z-20">

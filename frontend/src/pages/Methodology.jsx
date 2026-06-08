@@ -5,24 +5,24 @@ import { Shield, FileText, Calculator } from "lucide-react";
 
 const SCORES = [
   {
-    name: "Outcome Score",
-    formula: "0.45 · Placement + 0.30 · Median Salary (normalized) + 0.25 · Higher Studies (normalized)",
-    desc: "Composite of disclosed graduate destinations. Higher = stronger graduate-level outcomes across placement and continued education.",
+    name: "Career Success",
+    formula: "0.45 · Got Jobs + 0.30 · Typical Salary (normalised) + 0.25 · Further Studies (normalised)",
+    desc: "A single number out of 100 that combines whether students got jobs, what they typically earned, and whether they chose to study further. Higher = stronger career outcomes overall.",
   },
   {
-    name: "Transparency Rating",
-    formula: "Sum of completeness across 7 reporting categories, normalized to 0–100",
-    desc: "Measures how completely an institution discloses across placements, fees, faculty, infrastructure, audits, research and student outcomes.",
+    name: "Openness",
+    formula: "Sum of completeness across 7 disclosure areas, normalised to 0–100",
+    desc: "How completely a college shares information across placements, fees, faculty, infrastructure, audits, research and student outcomes. Higher = the college shares more openly.",
   },
   {
-    name: "ROI Rating",
-    formula: "Banded scale derived from (Median Salary × Placement %) / Estimated Cost",
-    desc: "Letter rating (AAA → BB) reflecting the cost-adjusted graduate outcome. Bands are absolute, not relative to a peer set.",
+    name: "Value For Money",
+    formula: "Letter rating from (Typical Salary × Got Jobs %) / What You'll Spend",
+    desc: "A letter grade (AAA → BB) that tells you whether the career outcomes are worth what families pay. The ratings are absolute, not just relative to a few colleges.",
   },
   {
-    name: "Research Indicator",
-    formula: "Normalized composite of publications, citations and sponsored research disclosed in NIRF and institution reports",
-    desc: "Captures research intensity at the institutional level.",
+    name: "Research & Innovation",
+    formula: "Normalised mix of publications, citations and sponsored research disclosed in NIRF and college reports",
+    desc: "How research-active a college is at the institutional level. Higher = more active research culture.",
   },
 ];
 
@@ -32,18 +32,18 @@ export default function MethodologyPage() {
       <Navbar />
       <main className="max-w-[1400px] mx-auto px-6 sm:px-8 lg:px-12 py-12">
         <div className="mb-12">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-slate2 font-semibold mb-3 font-mono">Methodology · Version 1.0 · Feb 2026</div>
-          <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-bold">How Filed builds its scores.</h1>
+          <div className="text-[10px] uppercase tracking-[0.22em] text-slate2 font-semibold mb-3 font-mono">How We Calculated This · Version 1.0 · Feb 2026</div>
+          <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-bold">How we built every score.</h1>
           <p className="mt-4 text-base text-slate2 max-w-2xl leading-relaxed">
-            Every composite score on Filed has a published formula and a primary source. This page is the index. Click into individual factsheets to see metric-level calculations on hover.
+            Every score on Filed has a published formula and a primary source. This page lists them all in one place. Hover any number on a college snapshot to see how that number was worked out.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-border border border-border mb-12">
           {[
-            { i: Shield, t: "Source-First", d: "We attribute every figure to a primary document. No figure exists on Filed without an attached source." },
-            { i: FileText, t: "Filed, Not Inferred", d: "We surface what institutions themselves disclose. We do not estimate, infer or extrapolate." },
-            { i: Calculator, t: "Explainable Composites", d: "Composite scores publish their constituent weights. Nothing is computed behind a curtain." },
+            { i: Shield, t: "Source-first", d: "We tag every number with the document or filing it came from. No source, no number." },
+            { i: FileText, t: "We don\u2019t make stuff up", d: "We show what colleges file publicly. We don\u2019t estimate, infer or extrapolate." },
+            { i: Calculator, t: "Open formulas", d: "Composite scores publish their ingredients. Nothing is computed behind a curtain." },
           ].map((p) => {
             const Ic = p.i;
             return (
