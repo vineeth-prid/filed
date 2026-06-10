@@ -41,6 +41,12 @@ Build a high-fidelity product prototype for **Filed**, an Education Due Diligenc
 - Methodology page (`/methodology`) — published formulas for composite scores
 - Backend `/api/insights` endpoint using Claude Sonnet 4.5 with strict neutral-analyst system prompt
 
+## Admin Panel + Authentication (Jun 2026)
+- **Admin Panel hub** at `/admin` (`AdminHome.jsx`) — pipeline stats + cards linking the 5 modules (Sync, Extraction Review, Normalized Metrics, Intelligence, Annual Refresh). Reachable via "Admin" link in the navbar (shared on all pages). Backend: `GET /api/admin/nirf/overview`.
+- **Admin login (JWT Bearer)** — single seeded admin (`vini.roks@gmail.com`), email+password, bcrypt hash, 12h token in localStorage, `Authorization: Bearer` header. `auth.py` + `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`.
+- **Protection**: middleware gates ALL `/api/admin/*` routes (401 without token); public site routes stay open. Frontend `ProtectedRoute` wraps all `/admin/*` pages → redirects to `/admin/login`. Navbar shows Logout when authed.
+- Verified: backend 17/17 + frontend 14/14 (iteration_6.json, 100%). Admin creds in `/app/memory/test_credentials.md`.
+
 ## Annual NIRF Refresh Workflow (Jun 2026)
 - `annual_refresh.py` — one-click "Sync NIRF {year}" orchestrates a 7-stage staged background job: scrape → find institutions → generate PDF URLs → download → extract → calculate metrics & scores → update DB & track changes. Reuses the tested extraction/normalization/intelligence building blocks.
 - Stage 4 has a fast connectivity probe; if upstream NIRF is unreachable / the year isn't published, it falls back to a clearly-labelled SIMULATED carry-forward from the latest prior year (data_origin="simulated") so change tracking stays demonstrable. Uses REAL downloads whenever the site is reachable.
