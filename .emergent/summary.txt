@@ -1,0 +1,144 @@
+<analysis>**original_problem_statement**: 
+BUILD A HIGH-FIDELITY PRODUCT PROTOTYPE
+Product Name: Filed
+Tagline: Before investing in a college, review the facts.
+Mission: An Education Due Diligence Platform that helps students and parents make better higher education decisions using publicly available institutional disclosures.
+Design Philosophy: Financial-report style (Morningstar/Bloomberg aesthetic).
+PRODUCT REQUIREMENTS:
+1. 10-section Homepage (Hero, Decision Gap, Market Landscape, College Intelligence Categories, Factsheet Preview, Disclosure Comparison, Comparison Engine, Insight Engine, Methodology, Final CTA).
+2. Advanced Compare Engine (up to 4 colleges, sticky table, radar chart).
+3. Find Colleges That Match You discovery flow.
+4. My College Shortlist with PDF generation.
+5. Dual Experience (Student Mode vs Parent Mode).
+6. NIRF Data Acquisition Service (Scraper for downloading/tracking NIRF PDFs).
+
+**User's preferred language**: English
+(INSTRUCT NEXT AGENT: You MUST respond in English only).
+
+**what currently exists?**: 
+A high-fidelity full-stack prototype (React + FastAPI + MongoDB). It features a fully designed 10-section homepage, a college-matching wizard, an advanced comparison dashboard with radar charts, a localStorage-backed watchlist with PDF exports, and a dual Student/Parent viewing mode. The backend supports LLM-powered natural language insights and a newly implemented Python-based NIRF Data Acquisition scraping service to fetch and track official PDFs.
+
+**Last working item**: 
+- Last item agent was working: Fixing an ESLint error () in the newly created Admin UI for the NIRF Data Acquisition feature ().
+- Status: IN PROGRESS
+- Agent Testing Done: N (Linting currently failing)
+- Which testing method agent to use?: Frontend testing agent / manual testing by screenshot tool
+- User Testing Done: N
+
+**All Pending/In progress Issue list**: 
+Issue 1: ESLint  error in  (P0)
+- Attempted fixes: Agent tried moving  and  hooks around, but the linter keeps flagging a state-setting violation.
+- Next debug checklist: Check  line 58. Ensure that state setters (, , etc.) are only called inside event handlers (like ) or , and NOT directly in the main component render body.
+- Why fix this issue and what will be achieved with the fix?: The frontend build is currently failing and blocking deployment/completion of the job. Fixing this will make the Admin NIRF dashboard functional.
+- Status: IN PROGRESS
+- Is recurring issue?: Y
+- Should Test frontend/backend/both after fix?: Frontend
+
+**In progress Task List**: 
+Task 1: Complete the NIRF Data Acquisition Service Admin UI
+- Where to resume: Fix the lint error in  and ensure the dashboard accurately reflects scraped data and polling status.
+- What will be achieved with this?: Admins will have a UI to trigger the NIRF scraping script and view download statuses of PDFs.
+- Status: IN PROGRESS
+- Should Test frontend/backend/both after fix?: Both
+- Blocked on something: Issue 1 (Linting error)
+
+**Upcoming and Future Tasks**:
+Future Tasks:
+- Refactor NIRF backend architecture to Node.js + Typescript + PostgreSQL (P2) - *Note: User originally requested this stack, but approved the agent's pragmatic approach to build it in the existing Python/FastAPI + MongoDB stack for rapid prototyping. Wait for user confirmation if migration is strictly necessary.*
+
+**Completed work in this session**:
+- Homepage with 10 mandatory sections (DONE)
+- Emergent Universal Key integrated for Claude Sonnet 4.5 Insights API (DONE)
+- Find Colleges That Match You discovery flow () (DONE)
+- Advanced Comparison Page with Radar Chart () (DONE)
+- My College Shortlist feature with PDF Report Generation (, ) (DONE)
+- Dual Experience: Student/Parent Mode Toggle (, , ) (DONE)
+- NIRF Data Acquisition Python Scraper () (DONE)
+- Product Copy Refactoring to conversational tone (DONE)
+
+**Earlier issues found/mentioned but not fixed**:
+None
+
+**Known issue recurrence from previous fork**:
+- Issue recurrence in previous fork: N/A
+- Recurrence count: 0
+- Status: N/A
+
+**Code Architecture**:
+
+
+**Key Technical Concepts**:
+React, Tailwind CSS, Shadcn UI, FastAPI, MongoDB, BeautifulSoup4 (Scraping), Puppeteer/HTML-to-PDF (assumed via frontend window.print / PDF export), LocalStorage State Management (Zustand/Context-free).
+
+**key DB schema**:
+- : mocked JSON data in frontend .
+-  / : Managed by  to track PDF status.
+
+**changes in tech stack**:
+Added  and  to Python backend for scraping.
+
+**All files of reference**:
+- : Currently broken with lint errors.
+- : Backend scraper script.
+- : Integrated the scraper API endpoints.
+- : Contains the dual-mode logic and shortlist injection.
+- : Zustand or plain store for Student/Parent mode.
+- : Watchlist state.
+
+**Areas that need refactoring**:
+-  specifically around  and polling logic where state updates are bleeding into the component lifecycle.
+- Note: Pre-existing Shadcn UI template components (, ) contain lint errors out of the agent's control. Do not attempt to fix these library-specific lint warnings unless they crash the build.
+
+**key api endpoints**:
+- : Accepts college data and generates LLM-powered natural language insights.
+- : Triggers the scraping/download job.
+- : Returns counts and list of tracked documents.
+
+**Critical Info for New Agent**:
+- The user requested Node.js/PostgreSQL for the NIRF module, but the agent utilized the existing Python/FastAPI setup after an  prompt where the user selected option 1. Continue working in Python unless specifically instructed otherwise.
+- Hot-reloading is enabled. Do NOT manually restart frontend/backend for regular code changes. Only restart via supervisor if dependencies or  change.
+- Never use npm; always use yarn.
+- Fix the  lint error immediately before continuing to test or build.
+
+**documents and test reports created in this job**:
+- 
+- 
+
+**Last 10 User Messages and any pending HUMAN messages**:
+1. (User) Option 1 (Response to an unseen prompt about the NIRF scraper stack). - *Completed*
+2. (User) Build a complete NIRF Data Acquisition Service... - *In Progress (Blocked by Lint)*
+3. (User) BUILD A DUAL EXPERIENCE Student Mode Parent Mode... - *Completed*
+4. (User) BUILD A FEATURE CALLED My College Shortlist... - *Completed*
+5. (User) BUILD AN ADVANCED COLLEGE COMPARISON PAGE... - *Completed*
+6. (User) BUILD A FEATURE CALLED Find Colleges That Match You... - *Completed*
+7. (User) REFACTOR THE ENTIRE PRODUCT COPY. Current version feels like NIRF report... - *Completed*
+8. (User) Data source: a. Use realistic mock data... Scope: a. Marketing homepage... - *Completed*
+9. (User) Start the task now - *Completed*
+
+**Project Health Check**:
+- Broken (Frontend build is failing due to strict ESLint checks in ).
+
+**3rd Party Integrations**:
+- Claude Sonnet 4.5 — uses Emergent LLM Key (API key is mapped to  in ).
+
+**Testing status**:
+- Testing agent used after significant changes: YES (Tested initial homepage and insights).
+- Troubleshoot agent used after agent stuck in loop: NO
+- Test files created: 
+- Known regressions:  build fail.
+
+**Credentials to test flow**:
+No auth implemented yet. Endpoints are open. 
+
+**What agent forgot to execute**:
+The agent didn't successfully isolate the React hook errors in , preventing successful task completion.
+
+**Debugging checklist for current issue**:
+Issue:  in 
+Frontend files to check: 
+-  (Lines 40-60)
+Checklist:
+1. Open .
+2. Look for , , or other  function calls sitting directly inside the component body.
+3. Move them into , , or a proper event handler function ().
+4. Run  to confirm the error is cleared.</analysis>
