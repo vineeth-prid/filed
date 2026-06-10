@@ -6,7 +6,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   SlidersHorizontal, RefreshCw, ArrowLeft, GitBranch, BarChart3,
-  TrendingUp, Users, FlaskConical, ChevronRight, FileText,
+  TrendingUp, Users, FlaskConical, ChevronRight, FileText, Brain,
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -103,6 +103,10 @@ export default function AdminMetrics() {
           <Link to="/admin/nirf/review" data-testid="metrics-to-review"
             className="inline-flex items-center gap-2 h-10 px-4 border border-border text-xs text-navy hover:border-navy font-mono">
             <ArrowLeft className="w-3.5 h-3.5" /> Extraction Review
+          </Link>
+          <Link to="/admin/nirf/intelligence" data-testid="metrics-to-intelligence"
+            className="inline-flex items-center gap-2 h-10 px-4 bg-navy text-white text-xs hover:opacity-90 font-mono">
+            <Brain className="w-3.5 h-3.5" /> Intelligence Scores →
           </Link>
         </div>
 

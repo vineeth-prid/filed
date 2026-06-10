@@ -12,6 +12,7 @@ import Report from "./pages/Report";
 import AdminNIRF from "./pages/AdminNIRF";
 import AdminExtract from "./pages/AdminExtract";
 import AdminMetrics from "./pages/AdminMetrics";
+import AdminIntelligence from "./pages/AdminIntelligence";
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
           <Route path="/admin/nirf" element={<AdminNIRF />} />
           <Route path="/admin/nirf/review" element={<AdminExtract />} />
           <Route path="/admin/nirf/metrics" element={<AdminMetrics />} />
+          <Route path="/admin/nirf/intelligence" element={<AdminIntelligence />} />
           <Route path="/methodology" element={<Methodology />} />
         </Routes>
       </BrowserRouter>

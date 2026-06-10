@@ -21,6 +21,9 @@ from nirf_extractor import (
 from nirf_normalizer import (
     run_normalization, normalize_document, compute_derived_metrics, metric_catalog,
 )
+from intelligence_engine import (
+    run_intelligence, compute_one, set_fees, score_catalog,
+)
 
 
 ROOT_DIR = Path(__file__).parent
@@ -428,6 +431,84 @@ async def get_raw_data_versions(document_id: str):
         raise HTTPException(404, "No raw data captured for this document")
     return {"document_id": document_id, "versions": rows, "version_count": len(rows)}
 # ----------------- /Normalization -----------------
+
+
+# ----------------- College Intelligence Engine -----------------
+class IntelligenceRequest(BaseModel):
+    year: int = 2024
+    category: str = "Engineering"
+
+
+class FeesRequest(BaseModel):
+    fees: int
+    source: Optional[str] = "Admin-set fee"
+
+
+@api_router.get("/admin/nirf/intelligence/catalog")
+async def intelligence_catalog():
+    """Score definitions + inputs + method (drives the UI explainability)."""
+    return {"scores": score_catalog()}
+
+
+@api_router.post("/admin/nirf/intelligence")
+async def trigger_intelligence(req: IntelligenceRequest):
+    if req.category not in CATEGORY_SLUG:
+        raise HTTPException(400, f"Unsupported category. Choose one of: {list(CATEGORY_SLUG.keys())}")
+    job_id = str(uuid.uuid4())
+    job = {
+        "id": job_id, "year": req.year, "category": req.category, "status": "Queued",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "stats": {"total": 0, "scored": 0}, "logs": [],
+    }
+    await db.nirf_intelligence_jobs.insert_one({**job})
+    _spawn(run_intelligence(db, job_id, req.year, req.category))
+    return {"job_id": job_id, "status": "Queued"}
+
+
+@api_router.get("/admin/nirf/intelligence/jobs/{job_id}")
+async def get_intelligence_job(job_id: str):
+    job = await db.nirf_intelligence_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(404, "Intelligence job not found")
+    return job
+
+
+@api_router.get("/admin/nirf/intelligence")
+async def list_intelligence(year: Optional[int] = None, category: Optional[str] = None, limit: int = 500):
+    query: dict = {}
+    if year:
+        query["year"] = year
+    if category:
+        query["category"] = category
+    rows = await db.nirf_intelligence_scores.find(query, {"_id": 0}).sort("overall_index", -1).to_list(limit)
+    return {"intelligence": rows, "count": len(rows)}
+
+
+@api_router.get("/admin/nirf/intelligence/{document_id}")
+async def get_intelligence(document_id: str):
+    rec = await db.nirf_intelligence_scores.find_one({"document_id": document_id}, {"_id": 0})
+    if not rec:
+        rec = await db.nirf_intelligence_scores.find_one({"id": document_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Intelligence scores not found")
+    return rec
+
+
+@api_router.post("/admin/nirf/documents/{document_id}/intelligence")
+async def compute_intelligence_one(document_id: str):
+    rec = await compute_one(db, document_id)
+    if not rec:
+        raise HTTPException(404, "Derived metrics for document not found — normalize it first")
+    return rec
+
+
+@api_router.put("/admin/nirf/fees/{document_id}")
+async def update_fees(document_id: str, req: FeesRequest):
+    rec = await set_fees(db, document_id, req.fees, req.source or "Admin-set fee")
+    if not rec:
+        raise HTTPException(404, "Derived metrics for document not found — normalize it first")
+    return rec
+# ----------------- /Intelligence -----------------
 
 
 app.include_router(api_router)
