@@ -1,8 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
 import ModeToggle from "./ModeToggle";
+import { useAuth } from "../lib/AuthContext";
 
 export default function Navbar() {
   const location = useLocation();
+  const { user, logout } = useAuth();
   const linkCls = (path) =>
     `text-sm tracking-tight transition-colors ${
       location.pathname === path ? "text-navy" : "text-slate2 hover:text-navy"
@@ -36,7 +38,11 @@ export default function Navbar() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <Link to="/admin" data-testid="nav-admin" className="hidden sm:inline text-xs font-mono text-slate2 hover:text-navy tracking-wide">Admin</Link>
+            {user ? (
+              <button onClick={logout} data-testid="nav-logout" className="hidden sm:inline text-xs font-mono text-slate2 hover:text-navy tracking-wide">Logout</button>
+            ) : (
+              <Link to="/admin" data-testid="nav-admin" className="hidden sm:inline text-xs font-mono text-slate2 hover:text-navy tracking-wide">Admin</Link>
+            )}
             <ModeToggle size="sm" />
             <Link
               to="/compare"

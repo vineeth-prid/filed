@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -27,6 +28,9 @@ from intelligence_engine import (
 from annual_refresh import (
     run_annual_refresh, build_change_tracking, get_trends,
     _years_with_data, TRACKED_METRICS,
+)
+from auth import (
+    create_access_token, decode_token, bearer_from_header, seed_admin, authenticate,
 )
 
 
@@ -82,6 +86,36 @@ class InsightResponse(BaseModel):
 @api_router.get("/")
 async def root():
     return {"product": "Filed", "tagline": "Before investing in a college, review the facts."}
+
+
+# ---------- Admin Authentication ----------
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+@api_router.post("/auth/login")
+async def auth_login(req: LoginRequest):
+    user = await authenticate(db, req.email, req.password)
+    if not user:
+        raise HTTPException(401, "Invalid email or password")
+    token = create_access_token(user["email"], user["role"])
+    return {"access_token": token, "token_type": "bearer", "user": user}
+
+
+@api_router.get("/auth/me")
+async def auth_me(request: Request):
+    token = bearer_from_header(request.headers.get("Authorization", ""))
+    payload = decode_token(token) if token else None
+    if not payload:
+        raise HTTPException(401, "Not authenticated")
+    return {"email": payload["sub"], "role": payload.get("role", "admin")}
+
+
+@api_router.post("/auth/logout")
+async def auth_logout():
+    # Stateless JWT — the client discards the token. Endpoint provided for symmetry.
+    return {"ok": True}
 
 
 @api_router.post("/status", response_model=StatusCheck)
@@ -605,6 +639,17 @@ async def trends(category: str = "Engineering", metric: str = "median_salary"):
 app.include_router(api_router)
 
 
+# Protect every /api/admin/* route with admin JWT (login/auth routes stay open).
+@app.middleware("http")
+async def admin_auth_middleware(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/admin") and request.method != "OPTIONS":
+        token = bearer_from_header(request.headers.get("Authorization", ""))
+        if not token or not decode_token(token):
+            return JSONResponse(status_code=401, content={"detail": "Admin authentication required"})
+    return await call_next(request)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -612,6 +657,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def on_startup():
+    await seed_admin(db)
+    logger.info("Admin account seeded / verified")
 
 
 @app.on_event("shutdown")

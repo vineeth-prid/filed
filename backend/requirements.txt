@@ -129,3 +129,5 @@ camelot-py==2.0.0
 pytesseract==0.3.13
 pdf2image==1.17.0
 opencv-python-headless==4.13.0.92
+PyJWT==2.13.0
+bcrypt==4.1.3
