@@ -41,6 +41,16 @@ Build a high-fidelity product prototype for **Filed**, an Education Due Diligenc
 - Methodology page (`/methodology`) — published formulas for composite scores
 - Backend `/api/insights` endpoint using Claude Sonnet 4.5 with strict neutral-analyst system prompt
 
+## Annual NIRF Refresh Workflow (Jun 2026)
+- `annual_refresh.py` — one-click "Sync NIRF {year}" orchestrates a 7-stage staged background job: scrape → find institutions → generate PDF URLs → download → extract → calculate metrics & scores → update DB & track changes. Reuses the tested extraction/normalization/intelligence building blocks.
+- Stage 4 has a fast connectivity probe; if upstream NIRF is unreachable / the year isn't published, it falls back to a clearly-labelled SIMULATED carry-forward from the latest prior year (data_origin="simulated") so change tracking stays demonstrable. Uses REAL downloads whenever the site is reachable.
+- **Year-on-Year change tracking** (`nirf_yoy_changes`): Median Salary, Placement (pp), Faculty changes per institution (current/previous/delta/pct_change/direction) + cohort summary.
+- **YoY trends** endpoint: per-metric (median_salary / placement_rate / faculty_count) cohort-average + per-institution series across all years on record.
+- **Historical records never overwritten**: every collection keyed by (institute_id, year, category)/per-year document_id; a new survey year creates new documents and leaves prior years intact (verified: 2024 untouched after 2026 sync).
+- Admin UI `/admin/nirf/refresh` (`AdminRefresh.jsx`): year picker + Sync button, 7-stage live progress, simulated-data banner, change-summary KPIs, YoY change table (up/down arrows), Recharts trend chart with metric tabs.
+- APIs: `/api/admin/nirf/refresh` (+jobs/{id}), `/years`, `/changes`, `/trends`.
+- Tests: `/app/backend/tests/test_refresh.py` (6) — full backend+frontend verified (iteration_5.json, 100%).
+
 ## College Intelligence Engine (Jun 2026)
 - `intelligence_engine.py` — generates 4 explainable composite scores (0–100) per institution via cohort-relative min–max normalization of derived metrics + raw fields, then weighted average.
   - **Career Success** = Placement Rate (.45) + Median Salary (.35) + Higher Studies Rate (.20)
@@ -76,7 +86,7 @@ Build a high-fidelity product prototype for **Filed**, an Education Due Diligenc
 
 
 ## Prioritized Backlog
-- **DONE (Jun 2026)** — NIRF Acquisition + PDF Extraction + Data Normalization + **College Intelligence Engine (4 explainable scores)**
+- **DONE (Jun 2026)** — NIRF Acquisition + PDF Extraction + Normalization + Intelligence Engine + **Annual Refresh Workflow (YoY change tracking + trends)**
 - **P1**: Hover-tooltip refinements on all factsheet metrics (calculation explainer)
 - **P1**: Persistent comparison state via localStorage
 - **P2**: Insights streaming (currently non-streaming send_message)
