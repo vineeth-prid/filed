@@ -6,7 +6,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   Brain, RefreshCw, ArrowLeft, ChevronRight, Calculator, X,
-  Briefcase, Wallet, GraduationCap, ShieldCheck, Check, Pencil,
+  Briefcase, Wallet, GraduationCap, ShieldCheck, Check, Pencil, RotateCw,
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -120,6 +120,10 @@ export default function AdminIntelligence() {
           <Link to="/admin/nirf/metrics" data-testid="intel-to-metrics"
             className="inline-flex items-center gap-2 h-10 px-4 border border-border text-xs text-navy hover:border-navy font-mono">
             <ArrowLeft className="w-3.5 h-3.5" /> Normalized Metrics
+          </Link>
+          <Link to="/admin/nirf/refresh" data-testid="intel-to-refresh"
+            className="inline-flex items-center gap-2 h-10 px-4 bg-navy text-white text-xs hover:opacity-90 font-mono">
+            <RotateCw className="w-3.5 h-3.5" /> Annual Refresh →
           </Link>
         </div>
 

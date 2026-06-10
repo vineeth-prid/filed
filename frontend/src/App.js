@@ -13,6 +13,7 @@ import AdminNIRF from "./pages/AdminNIRF";
 import AdminExtract from "./pages/AdminExtract";
 import AdminMetrics from "./pages/AdminMetrics";
 import AdminIntelligence from "./pages/AdminIntelligence";
+import AdminRefresh from "./pages/AdminRefresh";
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
           <Route path="/admin/nirf/review" element={<AdminExtract />} />
           <Route path="/admin/nirf/metrics" element={<AdminMetrics />} />
           <Route path="/admin/nirf/intelligence" element={<AdminIntelligence />} />
+          <Route path="/admin/nirf/refresh" element={<AdminRefresh />} />
           <Route path="/methodology" element={<Methodology />} />
         </Routes>
       </BrowserRouter>

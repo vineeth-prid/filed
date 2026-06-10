@@ -24,6 +24,10 @@ from nirf_normalizer import (
 from intelligence_engine import (
     run_intelligence, compute_one, set_fees, score_catalog,
 )
+from annual_refresh import (
+    run_annual_refresh, build_change_tracking, get_trends,
+    _years_with_data, TRACKED_METRICS,
+)
 
 
 ROOT_DIR = Path(__file__).parent
@@ -509,6 +513,68 @@ async def update_fees(document_id: str, req: FeesRequest):
         raise HTTPException(404, "Derived metrics for document not found — normalize it first")
     return rec
 # ----------------- /Intelligence -----------------
+
+
+# ----------------- Annual NIRF Refresh + Change Tracking -----------------
+class RefreshRequest(BaseModel):
+    year: int = 2026
+    category: str = "Engineering"
+    limit: int = 25
+    simulate: bool = True
+
+
+@api_router.post("/admin/nirf/refresh")
+async def trigger_refresh(req: RefreshRequest):
+    if req.category not in CATEGORY_SLUG:
+        raise HTTPException(400, f"Unsupported category. Choose one of: {list(CATEGORY_SLUG.keys())}")
+    job_id = str(uuid.uuid4())
+    job = {
+        "id": job_id, "year": req.year, "category": req.category, "status": "Queued",
+        "created_at": datetime.now(timezone.utc).isoformat(), "stages": [], "logs": [],
+    }
+    await db.nirf_refresh_jobs.insert_one({**job})
+    _spawn(run_annual_refresh(db, job_id, req.year, req.category, req.limit, req.simulate))
+    return {"job_id": job_id, "status": "Queued"}
+
+
+@api_router.get("/admin/nirf/refresh/jobs/{job_id}")
+async def get_refresh_job(job_id: str):
+    job = await db.nirf_refresh_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(404, "Refresh job not found")
+    return job
+
+
+@api_router.get("/admin/nirf/years")
+async def list_years(category: str = "Engineering"):
+    return {"category": category, "years": await _years_with_data(db, category)}
+
+
+@api_router.get("/admin/nirf/changes")
+async def list_changes(year: int, category: str = "Engineering", limit: int = 500):
+    rows = await db.nirf_yoy_changes.find({"year": year, "category": category}, {"_id": 0}).to_list(limit)
+    prev = rows[0]["previous_year"] if rows else None
+
+    def avg(metric, key="pct_change"):
+        vals = [r["changes"][metric][key] for r in rows if r["changes"][metric].get(key) is not None]
+        return round(sum(vals) / len(vals), 1) if vals else None
+
+    summary = {
+        "year": year, "previous_year": prev, "institutions": len(rows),
+        "avg_salary_pct": avg("median_salary"),
+        "avg_placement_delta_pp": avg("placement_rate", "delta"),
+        "avg_faculty_pct": avg("faculty_count"),
+        "data_origin": rows[0]["data_origin"] if rows else "extracted",
+    }
+    return {"changes": rows, "summary": summary}
+
+
+@api_router.get("/admin/nirf/trends")
+async def trends(category: str = "Engineering", metric: str = "median_salary"):
+    if metric not in TRACKED_METRICS:
+        raise HTTPException(400, f"metric must be one of {TRACKED_METRICS}")
+    return await get_trends(db, category, metric)
+# ----------------- /Refresh -----------------
 
 
 app.include_router(api_router)
