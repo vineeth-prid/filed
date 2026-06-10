@@ -41,6 +41,16 @@ Build a high-fidelity product prototype for **Filed**, an Education Due Diligenc
 - Methodology page (`/methodology`) — published formulas for composite scores
 - Backend `/api/insights` endpoint using Claude Sonnet 4.5 with strict neutral-analyst system prompt
 
+## Data Normalization Service (Jun 2026)
+- `nirf_normalizer.py` — turns raw extracted fields into comparable cross-institution metrics WITHOUT mutating raw data.
+- Two collections (the required "tables"):
+  - `nirf_raw_data` — IMMUTABLE, versioned, insert-only snapshots of raw fields (content-hashed; new version only when values change; manual corrections create a new version while old versions are preserved).
+  - `nirf_derived_metrics` — computed metrics, each carrying formula + input fields (value + source_page) + pointer to the raw_data version (full traceability).
+- 11 derived metrics: Placement Rate / Higher Studies Rate / Outcome Rate (each UG, PG, Overall), Faculty Ratio (students/faculty), Research per Faculty (funding/faculty). Confidence = min of input confidences; missing/zero inputs → status insufficient_data / division_by_zero.
+- Admin UI: `/admin/nirf/metrics` (`AdminMetrics.jsx`) — cross-institution comparison table + per-institution detail with formulas and source-traceability chips. Linked from review/sync pages.
+- APIs: `/api/admin/nirf/normalize` (+jobs), `/derived-metrics` (+/{id}), `/raw-data/{id}` (versions), `/metrics/catalog`, `/documents/{id}/normalize`.
+- Tests: `/app/backend/tests/test_normalization.py` (7) — total backend suite 16 pass; full backend+frontend verified (iteration_3.json, 100%).
+
 ## PDF Extraction Engine (Jun 2026)
 - `nirf_extractor.py` — layered extraction: pdfplumber (primary text+tables), Camelot (table corroboration), OCR/tesseract fallback for image-only pages.
 - Extracts 20 fields across 6 groups: Institution (name/state/city), Students (total/UG/PG/PhD), Faculty, Placement UG & PG (graduated/placed/higher-studies/median-salary), Research (patents filed/granted, sponsored projects, research funding).
@@ -54,7 +64,7 @@ Build a high-fidelity product prototype for **Filed**, an Education Due Diligenc
 
 
 ## Prioritized Backlog
-- **DONE (Jun 2026)** — NIRF Data Acquisition admin (scrape/download/track/retry) + **PDF Extraction Engine**
+- **DONE (Jun 2026)** — NIRF Data Acquisition admin + PDF Extraction Engine + **Data Normalization Service (comparable derived metrics, immutable raw_data)**
 - **P1**: Hover-tooltip refinements on all factsheet metrics (calculation explainer)
 - **P1**: Persistent comparison state via localStorage
 - **P2**: Insights streaming (currently non-streaming send_message)
