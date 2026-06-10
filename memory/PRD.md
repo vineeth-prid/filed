@@ -41,6 +41,18 @@ Build a high-fidelity product prototype for **Filed**, an Education Due Diligenc
 - Methodology page (`/methodology`) — published formulas for composite scores
 - Backend `/api/insights` endpoint using Claude Sonnet 4.5 with strict neutral-analyst system prompt
 
+## College Intelligence Engine (Jun 2026)
+- `intelligence_engine.py` — generates 4 explainable composite scores (0–100) per institution via cohort-relative min–max normalization of derived metrics + raw fields, then weighted average.
+  - **Career Success** = Placement Rate (.45) + Median Salary (.35) + Higher Studies Rate (.20)
+  - **Value For Money** = Median Salary (.55) + Fees inverted (.45)
+  - **Academic Strength** = Faculty Ratio inverted (.35) + Research per Faculty (.45) + Patents (.20, excluded when absent → weights renormalized)
+  - **Transparency** = Data Availability (.5) + Source Completeness (.5), absolute scoring
+- Every score stores components (raw value, normalized sub-score, weight, contribution, source, direction) → powers the **"See How This Was Calculated"** breakdown. Letter grades AAA→C.
+- Fees aren't in NIRF PDFs → editable per-institution admin input (`nirf_fees`), seeded with indicative tuition by institution type; lowering fees recomputes VFM live.
+- Stored in `nirf_intelligence_scores`. Admin UI `/admin/nirf/intelligence` (`AdminIntelligence.jsx`): scores table + per-institution detail with 4 score cards, expandable calc breakdown, and inline fees editor.
+- APIs: `/api/admin/nirf/intelligence` (+jobs/{id}/list/detail/catalog), `/documents/{id}/intelligence`, PUT `/fees/{id}`.
+- Tests: `/app/backend/tests/test_intelligence.py` (7) — total suite 23 pass; full backend+frontend verified (iteration_4.json, 100%).
+
 ## Data Normalization Service (Jun 2026)
 - `nirf_normalizer.py` — turns raw extracted fields into comparable cross-institution metrics WITHOUT mutating raw data.
 - Two collections (the required "tables"):
@@ -64,7 +76,7 @@ Build a high-fidelity product prototype for **Filed**, an Education Due Diligenc
 
 
 ## Prioritized Backlog
-- **DONE (Jun 2026)** — NIRF Data Acquisition admin + PDF Extraction Engine + **Data Normalization Service (comparable derived metrics, immutable raw_data)**
+- **DONE (Jun 2026)** — NIRF Acquisition + PDF Extraction + Data Normalization + **College Intelligence Engine (4 explainable scores)**
 - **P1**: Hover-tooltip refinements on all factsheet metrics (calculation explainer)
 - **P1**: Persistent comparison state via localStorage
 - **P2**: Insights streaming (currently non-streaming send_message)
