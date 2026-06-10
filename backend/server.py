@@ -2,15 +2,18 @@ from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+import asyncio
 import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import uuid
 from datetime import datetime, timezone
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+from nirf_service import run_sync, retry_document, CATEGORY_SLUG
 
 
 ROOT_DIR = Path(__file__).parent
@@ -146,7 +149,102 @@ async def generate_insights(req: InsightRequest):
         raise HTTPException(status_code=500, detail=f"Insight generation failed: {str(e)}")
 
 
+# ----------------- NIRF Data Acquisition -----------------
+class SyncRequest(BaseModel):
+    year: int = 2024
+    category: str = "Engineering"
+    limit: int = 25
+
+
+@api_router.get("/admin/nirf/categories")
+async def list_categories():
+    return {"categories": list(CATEGORY_SLUG.keys())}
+
+
+@api_router.post("/admin/nirf/sync")
+async def trigger_sync(req: SyncRequest):
+    if req.category not in CATEGORY_SLUG:
+        raise HTTPException(400, f"Unsupported category. Choose one of: {list(CATEGORY_SLUG.keys())}")
+    job_id = str(uuid.uuid4())
+    job = {
+        "id": job_id,
+        "year": req.year,
+        "category": req.category,
+        "limit": req.limit,
+        "status": "Queued",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "stats": {"total": 0, "downloaded": 0, "failed": 0},
+        "logs": [],
+    }
+    await db.nirf_jobs.insert_one({**job})
+    asyncio.create_task(run_sync(db, job_id, req.year, req.category, req.limit))
+    return {"job_id": job_id, "status": "Queued"}
+
+
+@api_router.get("/admin/nirf/jobs")
+async def list_jobs(limit: int = 20):
+    rows = await db.nirf_jobs.find({}, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    return rows
+
+
+@api_router.get("/admin/nirf/jobs/{job_id}")
+async def get_job(job_id: str):
+    job = await db.nirf_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return job
+
+
+@api_router.get("/admin/nirf/institutions")
+async def list_institutions(year: Optional[int] = None, category: Optional[str] = None, q: Optional[str] = None, limit: int = 200):
+    query: dict = {}
+    if year:
+        query["year"] = year
+    if category:
+        query["category"] = category
+    if q:
+        query["college_name"] = {"$regex": q, "$options": "i"}
+    rows = await db.nirf_institutions.find(query, {"_id": 0}).sort("rank", 1).to_list(limit)
+    return rows
+
+
+@api_router.get("/admin/nirf/documents")
+async def list_documents(status: Optional[str] = None, year: Optional[int] = None, category: Optional[str] = None, limit: int = 500):
+    query: dict = {}
+    if status:
+        query["status"] = status
+    if year:
+        query["year"] = year
+    if category:
+        query["category"] = category
+    rows = await db.nirf_documents.find(query, {"_id": 0}).sort("updated_at", -1).to_list(limit)
+
+    counts = {"Pending": 0, "Downloaded": 0, "Failed": 0}
+    pipeline_query: dict = {}
+    if year:
+        pipeline_query["year"] = year
+    if category:
+        pipeline_query["category"] = category
+    async for r in db.nirf_documents.aggregate([
+        {"$match": pipeline_query},
+        {"$group": {"_id": "$status", "n": {"$sum": 1}}},
+    ]):
+        counts[r["_id"]] = r["n"]
+    return {"documents": rows, "counts": counts}
+
+
+@api_router.post("/admin/nirf/documents/{document_id}/retry")
+async def retry_doc(document_id: str):
+    updated = await retry_document(db, document_id)
+    if not updated:
+        raise HTTPException(404, "Document not found")
+    updated.pop("_id", None)
+    return updated
+# ----------------- /NIRF -----------------
+
+
 app.include_router(api_router)
+
 
 app.add_middleware(
     CORSMiddleware,
