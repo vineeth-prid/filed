@@ -13,11 +13,40 @@ import {
   microCareerSuccess, microValueForMoney, microTransparency, microConfidence,
 } from "../lib/microcopy";
 import { useShortlist } from "../lib/shortlistStore";
+import { useMode } from "../lib/modeStore";
+import { GraduationCap, Users } from "lucide-react";
+
+// KPI definitions keyed by id (used by both modes, reordered per mode).
+const KPI_DEFS = {
+  outcomeScore: (c, band) => ({ id: "outcomeScore", label: "Career Success", value: c.outcomeScore, color: "#0B1528" }),
+  roiRating: (c, band) => ({ id: "roiRating", label: "Value For Money", value: c.roiRating, color: "#059669" }),
+  transparency: (c, band) => ({ id: "transparency", label: "Openness", value: c.transparency, color: band.color }),
+  research: (c, band) => ({ id: "research", label: "Research & Innovation", value: c.research, color: "#4682B4" }),
+  cost: (c, band) => ({ id: "cost", label: "What You'll Spend", value: formatINR(c.cost), color: "#0B1528" }),
+  placementRate: (c, band) => ({ id: "placementRate", label: "Got Jobs", value: `${c.placementRate}%`, color: "#059669" }),
+  medianSalary: (c, band) => ({ id: "medianSalary", label: "Typical Salary", value: formatINR(c.medianSalary), color: "#059669" }),
+  facultyRatio: (c, band) => ({ id: "facultyRatio", label: "Student-To-Teacher Ratio", value: c.facultyRatio, color: "#4682B4" }),
+};
+
+// Detail metric definitions keyed by id.
+const buildMetricDefs = (c) => ({
+  placementRate: { label: "Students Who Got Jobs", value: `${c.placementRate}%`, micro: microPlacement(c.placementRate), source: "aicte", year: "2024", calc: "Placed graduates / total eligible cohort" },
+  medianSalary: { label: "Typical Salary", value: formatINR(c.medianSalary), micro: microSalary(), source: "nirf", year: "2024", calc: "Median of disclosed CTC across batch" },
+  higherStudies: { label: "Chose Further Studies", value: `${c.higherStudies}%`, micro: microHigherStudies(c.higherStudies), source: "nirf", year: "2024", calc: "Graduates pursuing PG education" },
+  facultyRatio: { label: "Student-To-Teacher Ratio", value: c.facultyRatio, micro: microRatio(c.facultyRatio), source: "aicte", year: "2024", calc: "Students per regular faculty" },
+  students: { label: "Students Enrolled", value: c.students.toLocaleString("en-IN"), micro: microStudents(c.students), source: "ugc", year: "2024", calc: "On-roll enrolment across programs" },
+  faculty: { label: "Teachers On Roll", value: c.faculty.toLocaleString("en-IN"), micro: microFaculty(c.faculty), source: "aicte", year: "2024", calc: "Regular full-time faculty" },
+  diversity: { label: "Student Mix", value: c.diversity, micro: microDiversity(), source: "institution", year: "2024", calc: "Composite across state + gender" },
+  cost: { label: "What You'll Spend", value: formatINR(c.cost), micro: microCost(), source: "institution", year: "2024", calc: "Tuition + accommodation, full program" },
+  research: { label: "Research & Innovation", value: c.research, micro: "Higher = more research-active. Based on publications and sponsored work.", source: "nirf", year: "2024", calc: "NIRF research sub-score, normalised to 0\u2013100" },
+  transparency: { label: "Openness", value: c.transparency, micro: microTransparency(c.transparency), source: "regulatory", year: "2024", calc: "Composite of completeness across 7 disclosure areas" },
+});
 
 export default function Factsheet() {
   const { id } = useParams();
   const c = getCollege(id);
   const sl = useShortlist();
+  const { mode } = useMode();
   const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
@@ -134,24 +163,37 @@ export default function Factsheet() {
             </div>
           </div>
 
-          {/* KPI strip */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border-b border-border">
-            <Kpi label="Career Success" value={c.outcomeScore} color="#0B1528" />
-            <Kpi label="Value For Money" value={c.roiRating} color="#059669" />
-            <Kpi label="Openness" value={c.transparency} color={band.color} />
-            <Kpi label="Research & Innovation" value={c.research} color="#4682B4" />
+          {/* Mode ribbon */}
+          <div className="border-b border-border px-6 sm:px-8 py-3 flex flex-wrap items-center gap-3" style={{ background: mode.accentBg }}>
+            <span className="inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] font-mono font-bold" style={{ color: mode.accent }}>
+              {mode.id === "student" ? <GraduationCap className="w-3.5 h-3.5" strokeWidth={2} /> : <Users className="w-3.5 h-3.5" strokeWidth={2} />}
+              {mode.badge}
+            </span>
+            <span className="text-[11px] text-navy">
+              {mode.id === "student" ? "Showing what matters when you're the one attending: " : "Showing what matters when you're underwriting the choice: "}
+              <span className="font-semibold">{mode.focus.slice(0, 3).join(" \u00B7 ")}</span>
+            </span>
           </div>
 
-          {/* Metrics */}
+          {/* KPI strip (re-prioritised by mode) */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border-b border-border">
+            {mode.kpiOrder.map((k, idx) => {
+              const def = KPI_DEFS[k]?.(c, band);
+              if (!def) return null;
+              return <Kpi key={k} label={def.label} value={def.value} color={idx === 0 ? mode.accent : def.color} prominent={idx === 0} />;
+            })}
+          </div>
+
+          {/* Metrics (re-ordered by mode) */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-px bg-border border-b border-border">
-            <Metric label="Students Who Got Jobs" value={`${c.placementRate}%`} micro={microPlacement(c.placementRate)} source="aicte" year="2024" calc="Placed graduates / total eligible cohort" />
-            <Metric label="Typical Salary" value={formatINR(c.medianSalary)} micro={microSalary()} source="nirf" year="2024" calc="Median of disclosed CTC across batch" />
-            <Metric label="Chose Further Studies" value={`${c.higherStudies}%`} micro={microHigherStudies(c.higherStudies)} source="nirf" year="2024" calc="Graduates pursuing PG education" />
-            <Metric label="Student-To-Teacher Ratio" value={c.facultyRatio} micro={microRatio(c.facultyRatio)} source="aicte" year="2024" calc="Students per regular faculty" />
-            <Metric label="Students Enrolled" value={c.students.toLocaleString("en-IN")} micro={microStudents(c.students)} source="ugc" year="2024" calc="On-roll enrolment across programs" />
-            <Metric label="Teachers On Roll" value={c.faculty.toLocaleString("en-IN")} micro={microFaculty(c.faculty)} source="aicte" year="2024" calc="Regular full-time faculty" />
-            <Metric label="Student Mix" value={c.diversity} micro={microDiversity()} source="institution" year="2024" calc="Composite across state + gender" />
-            <Metric label="What You'll Spend" value={formatINR(c.cost)} micro={microCost()} source="institution" year="2024" calc="Tuition + accommodation, full program" />
+            {(() => {
+              const defs = buildMetricDefs(c);
+              return mode.metricOrder.map((k) => {
+                const d = defs[k];
+                if (!d) return null;
+                return <Metric key={k} {...d} />;
+              });
+            })()}
           </div>
 
           {/* Composition */}
@@ -217,11 +259,15 @@ export default function Factsheet() {
   );
 }
 
-function Kpi({ label, value, color }) {
+function Kpi({ label, value, color, prominent }) {
   return (
-    <div className="bg-white p-5">
-      <div className="text-[9px] uppercase tracking-[0.16em] text-slate2 font-semibold">{label}</div>
-      <div className="font-heading font-bold text-3xl mt-2 tabular" style={{ color }}>{value}</div>
+    <div className="bg-white p-5" style={prominent ? { background: "linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(255,255,255,1) 100%)", boxShadow: `inset 0 -3px 0 ${color}` } : {}}>
+      <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-[0.16em] text-slate2 font-semibold">
+        {prominent && <span className="dot" style={{ background: color }} />}
+        {label}
+        {prominent && <span className="text-[8px] font-mono ml-1" style={{ color }}>TOP PICK</span>}
+      </div>
+      <div className={`font-heading font-bold mt-2 tabular ${prominent ? "text-4xl" : "text-3xl"}`} style={{ color }}>{value}</div>
     </div>
   );
 }

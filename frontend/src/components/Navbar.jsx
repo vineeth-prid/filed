@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Search } from "lucide-react";
+import ModeToggle from "./ModeToggle";
 
 export default function Navbar() {
   const location = useLocation();
@@ -36,14 +36,7 @@ export default function Navbar() {
           </nav>
 
           <div className="flex items-center gap-3">
-            <button
-              data-testid="nav-search-btn"
-              className="hidden sm:flex items-center gap-2 px-3 h-9 border border-border bg-white text-xs text-slate2 hover:border-navy transition-colors"
-            >
-              <Search className="w-3.5 h-3.5" />
-              <span>Search any college</span>
-              <kbd className="ml-3 px-1.5 py-0.5 text-[10px] font-mono border border-border bg-offwhite text-slate2">⌘K</kbd>
-            </button>
+            <ModeToggle size="sm" />
             <Link
               to="/compare"
               data-testid="nav-cta"
