@@ -1,8 +1,9 @@
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { useEffect, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
 import axios from "axios";
-import { RefreshCw, RotateCcw, Database, AlertTriangle, CheckCircle2, Clock, FileText, Activity } from "lucide-react";
+import { RefreshCw, RotateCcw, Database, AlertTriangle, CheckCircle2, Clock, FileText, Activity, Cpu } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -87,6 +88,10 @@ export default function AdminNIRF() {
               <span className="text-slate2">Scrape, download, track, retry.</span>
             </h1>
           </div>
+          <Link to="/admin/nirf/review" data-testid="to-extraction-review"
+            className="inline-flex items-center gap-2 h-11 px-5 bg-navy text-white text-xs tracking-wide hover:opacity-90 font-semibold">
+            <Cpu className="w-3.5 h-3.5" /> Extraction Review →
+          </Link>
         </div>
 
         {/* Controls */}

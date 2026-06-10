@@ -10,6 +10,7 @@ import Match from "./pages/Match";
 import Shortlist from "./pages/Shortlist";
 import Report from "./pages/Report";
 import AdminNIRF from "./pages/AdminNIRF";
+import AdminExtract from "./pages/AdminExtract";
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/shortlist" element={<Shortlist />} />
           <Route path="/shortlist/report" element={<Report />} />
           <Route path="/admin/nirf" element={<AdminNIRF />} />
+          <Route path="/admin/nirf/review" element={<AdminExtract />} />
           <Route path="/methodology" element={<Methodology />} />
         </Routes>
       </BrowserRouter>

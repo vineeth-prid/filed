@@ -1,0 +1,31 @@
+{
+  "summary": "Full backend + frontend verification of NIRF PDF Extraction Engine. Backend: 9/9 pytest API tests pass against live preview URL (schema, job lifecycle 15/15, list+summary+bands, get by id & document_id, 404, single re-extract, manual correction with recompute, correction preservation across re-extraction, unknown-field 400). Frontend: All target flows working — /admin/nirf/review loads, 15 institution rows render with confidence pills/bars, KPI strip correct, clicking a row (verified with IR-E-U-0306) fires GET /api/admin/nirf/extractions/{id} returning 200 and the right-hand review-panel mounts with all 6 field groups and 20 field rows. Editing patents_filed -> PATCH 200 -> 'corrected' tag appears. Forward+back navigation between /admin/nirf and /admin/nirf/review via to-extraction-review and back-to-sync both work. Regression on /admin/nirf passes (header + controls present).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_nirf_extraction_api.py",
+    "/app/backend/tests/test_extraction.py",
+    "/app/test_reports/pytest/nirf_extraction_api.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "nirf_extractor._extract_and_store: on re-extraction, the preserved manual correction overwrites the freshly extracted field's source_page/raw with the new ones — fine functionally, but original_value chain could be lost if a correction is applied to a previously corrected field after re-extraction (apply_correction reads prev.original_value when prev.corrected, so the chain is preserved). Acceptable.",
+    "server.py: trigger_extraction creates an asyncio.create_task without retaining a reference; on a busy event loop the task could be GC'd in theory. In practice uvicorn keeps it alive but a `app.state.background_tasks` set would be more robust.",
+    "AdminExtract.jsx: openRecord/saveCorrection lack try/catch — a transient 5xx during PATCH would leave the row in a stale state. Consider error toast + revert.",
+    "AdminExtract.jsx: ReviewPanel field rows do not show the 'raw' source snippet — would help reviewers cross-check the page text behind a low-confidence number."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_nirf_extraction_api.py (new)"
+  ],
+  "success_rate": { "backend": "100% (9/9)", "frontend": "100% on tested flows" },
+  "test_credentials": "N/A — admin endpoints are open per spec",
+  "seed_data_creation": "Extraction job created 15 nirf_extractions records for year=2024 category=Engineering. Test also applied a manual correction (patents_filed=42 then 77) to the first extraction; record status flipped to 'Reviewed'. Note for next agent: summary counts may reflect 1-2 'Reviewed' records due to this seeding.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend API regression suite is at /app/backend/tests/test_nirf_extraction_api.py (uses REACT_APP_BACKEND_URL). Run via: REACT_APP_BACKEND_URL=<url> pytest backend/tests/test_nirf_extraction_api.py -v. Frontend was checked with Playwright: row click on /admin/nirf/review correctly mounts data-testid='review-panel' (confirmed both via DOM and network — GET /api/admin/nirf/extractions/{id} returns 200). Earlier 'main agent could not verify click registration' is now confirmed working in real browser. Note: my Playwright text-locator for 'Placement' returned not-found because the actual group labels are 'Placement \u2014 UG' and 'Placement \u2014 PG' (em dash). All 20 field rows render, so all 6 groups are present.",
+  "rca_of_the_issue": "N/A — no bugs found; backend pytest, API regression suite, and full UI flow (load -> select row -> review -> edit -> save -> navigate) all pass."
+}

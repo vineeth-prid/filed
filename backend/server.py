@@ -14,6 +14,10 @@ from datetime import datetime, timezone
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 from nirf_service import run_sync, retry_document, CATEGORY_SLUG
+from nirf_extractor import (
+    run_extraction, extract_single, apply_correction,
+    FIELD_KEYS, FIELD_GROUPS, _confidence_band,
+)
 
 
 ROOT_DIR = Path(__file__).parent
@@ -240,6 +244,98 @@ async def retry_doc(document_id: str):
         raise HTTPException(404, "Document not found")
     updated.pop("_id", None)
     return updated
+
+
+# ----------------- PDF Extraction Engine -----------------
+class ExtractRequest(BaseModel):
+    year: int = 2024
+    category: str = "Engineering"
+
+
+class CorrectionRequest(BaseModel):
+    field: str
+    value: Any = None
+
+
+@api_router.get("/admin/nirf/extract/schema")
+async def extract_schema():
+    """Field schema that drives the admin review screen."""
+    return {"fields": FIELD_KEYS, "groups": FIELD_GROUPS}
+
+
+@api_router.post("/admin/nirf/extract")
+async def trigger_extraction(req: ExtractRequest):
+    if req.category not in CATEGORY_SLUG:
+        raise HTTPException(400, f"Unsupported category. Choose one of: {list(CATEGORY_SLUG.keys())}")
+    job_id = str(uuid.uuid4())
+    job = {
+        "id": job_id,
+        "year": req.year,
+        "category": req.category,
+        "status": "Queued",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "stats": {"total": 0, "extracted": 0, "failed": 0},
+        "logs": [],
+    }
+    await db.nirf_extract_jobs.insert_one({**job})
+    asyncio.create_task(run_extraction(db, job_id, req.year, req.category))
+    return {"job_id": job_id, "status": "Queued"}
+
+
+@api_router.get("/admin/nirf/extract/jobs/{job_id}")
+async def get_extract_job(job_id: str):
+    job = await db.nirf_extract_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(404, "Extraction job not found")
+    return job
+
+
+@api_router.get("/admin/nirf/extractions")
+async def list_extractions(year: Optional[int] = None, category: Optional[str] = None, limit: int = 500):
+    query: dict = {}
+    if year:
+        query["year"] = year
+    if category:
+        query["category"] = category
+    rows = await db.nirf_extractions.find(query, {"_id": 0}).sort("overall_confidence", 1).to_list(limit)
+    summary = {"total": len(rows), "High": 0, "Medium": 0, "Low": 0, "Reviewed": 0}
+    for r in rows:
+        summary[_confidence_band(r.get("overall_confidence", 0))] += 1
+        if r.get("status") == "Reviewed":
+            summary["Reviewed"] += 1
+        r["confidence_band"] = _confidence_band(r.get("overall_confidence", 0))
+    return {"extractions": rows, "summary": summary}
+
+
+@api_router.get("/admin/nirf/extractions/{extraction_id}")
+async def get_extraction(extraction_id: str):
+    rec = await db.nirf_extractions.find_one({"id": extraction_id}, {"_id": 0})
+    if not rec:
+        rec = await db.nirf_extractions.find_one({"document_id": extraction_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Extraction not found")
+    rec["confidence_band"] = _confidence_band(rec.get("overall_confidence", 0))
+    return rec
+
+
+@api_router.post("/admin/nirf/documents/{document_id}/extract")
+async def extract_one_doc(document_id: str):
+    rec = await extract_single(db, document_id)
+    if not rec:
+        raise HTTPException(404, "Document not found")
+    rec.pop("_id", None)
+    return rec
+
+
+@api_router.patch("/admin/nirf/extractions/{extraction_id}/field")
+async def correct_field(extraction_id: str, req: CorrectionRequest):
+    result = await apply_correction(db, extraction_id, req.field, req.value)
+    if result is None:
+        raise HTTPException(404, "Extraction not found")
+    if result.get("error"):
+        raise HTTPException(400, result["error"])
+    result.pop("_id", None)
+    return result
 # ----------------- /NIRF -----------------
 
 
