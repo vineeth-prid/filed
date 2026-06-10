@@ -14,6 +14,7 @@ import AdminExtract from "./pages/AdminExtract";
 import AdminMetrics from "./pages/AdminMetrics";
 import AdminIntelligence from "./pages/AdminIntelligence";
 import AdminRefresh from "./pages/AdminRefresh";
+import AdminHome from "./pages/AdminHome";
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
           <Route path="/match" element={<Match />} />
           <Route path="/shortlist" element={<Shortlist />} />
           <Route path="/shortlist/report" element={<Report />} />
+          <Route path="/admin" element={<AdminHome />} />
           <Route path="/admin/nirf" element={<AdminNIRF />} />
           <Route path="/admin/nirf/review" element={<AdminExtract />} />
           <Route path="/admin/nirf/metrics" element={<AdminMetrics />} />

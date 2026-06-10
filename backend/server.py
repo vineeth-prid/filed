@@ -185,6 +185,31 @@ async def list_categories():
     return {"categories": list(CATEGORY_SLUG.keys())}
 
 
+@api_router.get("/admin/nirf/overview")
+async def admin_overview(year: int = 2024, category: str = "Engineering"):
+    """Aggregate counts powering the Admin Panel hub dashboard."""
+    docs_total = await db.nirf_documents.count_documents({"year": year, "category": category})
+    docs_downloaded = await db.nirf_documents.count_documents({"year": year, "category": category, "status": "Downloaded"})
+    extractions = await db.nirf_extractions.count_documents({"year": year, "category": category})
+    derived = await db.nirf_derived_metrics.count_documents({"year": year, "category": category})
+    scores = await db.nirf_intelligence_scores.count_documents({"year": year, "category": category})
+    years = sorted([y for y in await db.nirf_extractions.distinct("year", {"category": category}) if isinstance(y, int)])
+    last_refresh = await db.nirf_refresh_jobs.find_one({}, {"_id": 0}, sort=[("created_at", -1)])
+    return {
+        "year": year, "category": category,
+        "institutions": docs_total,
+        "downloaded": docs_downloaded,
+        "extractions": extractions,
+        "derived_metrics": derived,
+        "intelligence_scores": scores,
+        "years_tracked": years,
+        "last_refresh": {
+            "year": last_refresh.get("year"), "status": last_refresh.get("status"),
+            "data_origin": last_refresh.get("data_origin"), "created_at": last_refresh.get("created_at"),
+        } if last_refresh else None,
+    }
+
+
 @api_router.post("/admin/nirf/sync")
 async def trigger_sync(req: SyncRequest):
     if req.category not in CATEGORY_SLUG:

@@ -36,6 +36,7 @@ export default function Navbar() {
           </nav>
 
           <div className="flex items-center gap-3">
+            <Link to="/admin" data-testid="nav-admin" className="hidden sm:inline text-xs font-mono text-slate2 hover:text-navy tracking-wide">Admin</Link>
             <ModeToggle size="sm" />
             <Link
               to="/compare"
