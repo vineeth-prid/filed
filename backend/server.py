@@ -18,6 +18,9 @@ from nirf_extractor import (
     run_extraction, extract_single, apply_correction,
     FIELD_KEYS, FIELD_GROUPS, _confidence_band,
 )
+from nirf_normalizer import (
+    run_normalization, normalize_document, compute_derived_metrics, metric_catalog,
+)
 
 
 ROOT_DIR = Path(__file__).parent
@@ -347,6 +350,84 @@ async def correct_field(extraction_id: str, req: CorrectionRequest):
     result.pop("_id", None)
     return result
 # ----------------- /NIRF -----------------
+
+
+# ----------------- Data Normalization Service -----------------
+class NormalizeRequest(BaseModel):
+    year: int = 2024
+    category: str = "Engineering"
+
+
+@api_router.get("/admin/nirf/metrics/catalog")
+async def metrics_catalog():
+    """The derived-metric definitions (label, group, formula) that power the UI."""
+    return {"metrics": metric_catalog()}
+
+
+@api_router.post("/admin/nirf/normalize")
+async def trigger_normalization(req: NormalizeRequest):
+    if req.category not in CATEGORY_SLUG:
+        raise HTTPException(400, f"Unsupported category. Choose one of: {list(CATEGORY_SLUG.keys())}")
+    job_id = str(uuid.uuid4())
+    job = {
+        "id": job_id,
+        "year": req.year,
+        "category": req.category,
+        "status": "Queued",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "stats": {"total": 0, "normalized": 0},
+        "logs": [],
+    }
+    await db.nirf_normalize_jobs.insert_one({**job})
+    _spawn(run_normalization(db, job_id, req.year, req.category))
+    return {"job_id": job_id, "status": "Queued"}
+
+
+@api_router.get("/admin/nirf/normalize/jobs/{job_id}")
+async def get_normalize_job(job_id: str):
+    job = await db.nirf_normalize_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job:
+        raise HTTPException(404, "Normalization job not found")
+    return job
+
+
+@api_router.post("/admin/nirf/documents/{document_id}/normalize")
+async def normalize_one_doc(document_id: str):
+    result = await normalize_document(db, document_id)
+    if not result:
+        raise HTTPException(404, "Extraction for document not found — extract it first")
+    return result
+
+
+@api_router.get("/admin/nirf/derived-metrics")
+async def list_derived_metrics(year: Optional[int] = None, category: Optional[str] = None, limit: int = 500):
+    query: dict = {}
+    if year:
+        query["year"] = year
+    if category:
+        query["category"] = category
+    rows = await db.nirf_derived_metrics.find(query, {"_id": 0}).sort("avg_confidence", -1).to_list(limit)
+    return {"derived_metrics": rows, "count": len(rows)}
+
+
+@api_router.get("/admin/nirf/derived-metrics/{document_id}")
+async def get_derived_metrics(document_id: str):
+    rec = await db.nirf_derived_metrics.find_one({"document_id": document_id}, {"_id": 0})
+    if not rec:
+        rec = await db.nirf_derived_metrics.find_one({"id": document_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Derived metrics not found")
+    return rec
+
+
+@api_router.get("/admin/nirf/raw-data/{document_id}")
+async def get_raw_data_versions(document_id: str):
+    """All immutable raw-data versions for a document (proves raw data is never overwritten)."""
+    rows = await db.nirf_raw_data.find({"document_id": document_id}, {"_id": 0}).sort("version", 1).to_list(100)
+    if not rows:
+        raise HTTPException(404, "No raw data captured for this document")
+    return {"document_id": document_id, "versions": rows, "version_count": len(rows)}
+# ----------------- /Normalization -----------------
 
 
 app.include_router(api_router)

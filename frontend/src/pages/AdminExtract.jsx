@@ -6,7 +6,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   Cpu, FileSearch, CheckCircle2, AlertTriangle, Gauge, Pencil, Check, X,
-  RefreshCw, ArrowLeft, Sparkles, FileText,
+  RefreshCw, ArrowLeft, Sparkles, FileText, SlidersHorizontal,
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -117,6 +117,10 @@ export default function AdminExtract() {
           <Link to="/admin/nirf" data-testid="back-to-sync"
             className="inline-flex items-center gap-2 h-10 px-4 border border-border text-xs text-navy hover:border-navy font-mono">
             <ArrowLeft className="w-3.5 h-3.5" /> NIRF Sync
+          </Link>
+          <Link to="/admin/nirf/metrics" data-testid="to-metrics"
+            className="inline-flex items-center gap-2 h-10 px-4 bg-navy text-white text-xs hover:opacity-90 font-mono">
+            <SlidersHorizontal className="w-3.5 h-3.5" /> Normalized Metrics →
           </Link>
         </div>
 

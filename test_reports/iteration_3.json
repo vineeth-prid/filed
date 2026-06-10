@@ -1,0 +1,33 @@
+{
+  "summary": "End-to-end verification of the College Data Normalization Service (backend + frontend). Backend: 10/10 new live-API regression tests pass (catalog=11 metrics, batch normalize 15/15 'Completed', derived-metrics list+detail with full traceability inputs[field/value/source_page], math correctness on a real record [placement_rate_overall, faculty_ratio, research_per_faculty], single-doc normalize returns {raw_data,derived}, raw-data/{id} versions endpoint, IMMUTABILITY both ways: (a) re-normalize with no change keeps version_count stable, (b) PATCH faculty_count -> new version created AND every pre-existing version row preserved unchanged, missing/zero handled with value=None + status insufficient_data/division_by_zero). Bundled module pytest 16/16 still pass. Frontend: /admin/nirf/metrics renders 15 institution rows in metrics-table with Placement/Outcome/Student:Faculty/Research-per-Faculty columns and 'raw vN' indicator; clicking metrics-row-IR-E-U-0456 mounts metrics-detail with 11 grouped metric blocks, formulas, values, confidence and traceability chips (field=value · pN); 'Normalize Metrics' button drives a job to Completed (15/15 institutions normalized) and table refreshes; navigation links metrics-to-review and to-metrics both work; regression on /admin/nirf passes.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_nirf_normalization_api.py",
+    "/app/backend/tests/test_normalization.py",
+    "/app/test_reports/pytest/nirf_normalization_api.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "nirf_normalizer.compute_derived_metrics: numerator+denominator inputs are concatenated with `num_inputs + den_inputs`; when the denominator is the synthetic `graduated_total`, _resolve_inputs flattens it into ug_graduated + pg_graduated. For *_overall metrics this can produce DUPLICATE input chips in the UI (e.g. ug_placed appears once as numerator and the same field name will not — but graduated_total expansion can list ug_graduated twice if it's already part of the numerator chain in mixed metrics). Not currently happening for the 11 defined metrics, but the logic is fragile if new metrics are added; consider dedupe-by-field when assembling `inputs`.",
+    "nirf_normalizer.persist_derived_metrics uses upsert on document_id, which means historical *derived* records are lost on re-normalize. The raw_data is correctly versioned/immutable, but the derived record only ever points at the LATEST raw_data_version. If audit history of derived values is desired, consider versioning derived_metrics too (mirror the raw_data versioning).",
+    "server.py /api/admin/nirf/normalize and /api/admin/nirf/documents/{id}/normalize: same `asyncio.create_task` pattern as the previous extraction route — the task reference is not retained, so on a busy event loop GC could theoretically cancel it. Park it in app.state.background_tasks for robustness.",
+    "AdminMetrics.jsx fetchRows: no try/catch — a transient 5xx will leave the table empty with no toast/error UI. Add an error state.",
+    "AdminMetrics.jsx pollJob: retries silently on error with a fixed 2.5s delay forever — no max attempts. If the job_id is invalid (e.g. transient 404 right after creation) the UI will spin indefinitely. Add a cap (e.g. 60 attempts).",
+    "AdminMetrics.jsx MetricDetail traceability chips de-duplicate visually? `inputs.map((i, idx))` renders every entry; for overall metrics the same field can theoretically appear twice (see code-review comment 1). Minor UX concern."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_nirf_normalization_api.py (new)"
+  ],
+  "success_rate": { "backend": "100% (10/10 live API + 16/16 module)", "frontend": "100% on tested flows" },
+  "test_credentials": "N/A - admin endpoints are open per spec",
+  "seed_data_creation": "Tests re-normalized the existing 15 extracted Engineering 2024 documents (creates a no-op nirf_raw_data version only if content_hash differs). The immutability test patches faculty_count on one record (briefly), then PATCHes it back to the original value and re-normalizes (a new version is created, but the original value is restored). Net effect on the DB: a couple of extra raw_data versions on the test doc reflecting the round-trip — this is by design (immutability spec) and does not pollute extractions.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Live API regression suite for the normalization feature lives at /app/backend/tests/test_nirf_normalization_api.py. Run with: REACT_APP_BACKEND_URL=<preview-url> pytest backend/tests/test_nirf_normalization_api.py -v. The immutability test fixture cleans up after itself by re-PATCHing faculty_count to its original value and re-normalizing, but expect raw_data version_count to grow by ~2 each full run. The metrics-detail flow in the browser works end-to-end (mounting [data-testid='metrics-detail'] is itself proof the GET succeeded since setSelected only fires in the axios .then). For Playwright observation of the response, do not access resp.request.method from inside the page.on('response') lambda — it errors silently; just listen on resp.url and resp.status.",
+  "rca_of_the_issue": "N/A - no bugs found. One initial failure in the immutability test was a TEST BUG (not an app bug): the assertion iterated over ALL pre-existing versions and required each to hold `original_fc`, but a record like IR-E-U-0456 already had v1..v3 from prior testing/main-agent work, each holding a different historical value (which is exactly what immutable versioning means). Fixed to assert that the LATEST pre-correction version preserves `original_fc` and that NO pre-existing version row is mutated during re-normalize. Both invariants now pass against real data."
+}
