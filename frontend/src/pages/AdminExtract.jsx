@@ -80,15 +80,23 @@ export default function AdminExtract() {
   };
 
   const openRecord = async (id) => {
-    const { data } = await axios.get(`${API}/admin/nirf/extractions/${id}`);
-    setSelected(data);
+    try {
+      const { data } = await axios.get(`${API}/admin/nirf/extractions/${id}`);
+      setSelected(data);
+    } catch (e) {
+      toast.error("Failed to load extraction");
+    }
   };
 
   const saveCorrection = async (field, value) => {
-    const { data } = await axios.patch(`${API}/admin/nirf/extractions/${selected.id}/field`, { field, value });
-    setSelected(data);
-    fetchList();
-    toast.success(`${FIELD_LABELS[field] || field} updated`);
+    try {
+      const { data } = await axios.patch(`${API}/admin/nirf/extractions/${selected.id}/field`, { field, value });
+      setSelected(data);
+      fetchList();
+      toast.success(`${FIELD_LABELS[field] || field} updated`);
+    } catch (e) {
+      toast.error("Failed to save correction");
+    }
   };
 
   return (

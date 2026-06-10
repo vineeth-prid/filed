@@ -33,6 +33,16 @@ EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+# Keep strong references to fire-and-forget background tasks so they are not GC'd.
+_background_tasks: set = set()
+
+
+def _spawn(coro):
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
 app = FastAPI(title="Filed — Education Due Diligence API")
 api_router = APIRouter(prefix="/api")
 
@@ -181,7 +191,7 @@ async def trigger_sync(req: SyncRequest):
         "logs": [],
     }
     await db.nirf_jobs.insert_one({**job})
-    asyncio.create_task(run_sync(db, job_id, req.year, req.category, req.limit))
+    _spawn(run_sync(db, job_id, req.year, req.category, req.limit))
     return {"job_id": job_id, "status": "Queued"}
 
 
@@ -278,7 +288,7 @@ async def trigger_extraction(req: ExtractRequest):
         "logs": [],
     }
     await db.nirf_extract_jobs.insert_one({**job})
-    asyncio.create_task(run_extraction(db, job_id, req.year, req.category))
+    _spawn(run_extraction(db, job_id, req.year, req.category))
     return {"job_id": job_id, "status": "Queued"}
 
 

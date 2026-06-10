@@ -41,7 +41,20 @@ Build a high-fidelity product prototype for **Filed**, an Education Due Diligenc
 - Methodology page (`/methodology`) — published formulas for composite scores
 - Backend `/api/insights` endpoint using Claude Sonnet 4.5 with strict neutral-analyst system prompt
 
+## PDF Extraction Engine (Jun 2026)
+- `nirf_extractor.py` — layered extraction: pdfplumber (primary text+tables), Camelot (table corroboration), OCR/tesseract fallback for image-only pages.
+- Extracts 20 fields across 6 groups: Institution (name/state/city), Students (total/UG/PG/PhD), Faculty, Placement UG & PG (graduated/placed/higher-studies/median-salary), Research (patents filed/granted, sponsored projects, research funding).
+- Every field stored as {value, source_page, confidence, method}. Overall confidence + coverage computed per doc. Confidence bands: High ≥0.85, Medium ≥0.6, Low <0.6.
+- NOTE: NIRF "Data Submitted" PDFs do not contain patent data → patents fields are null/0-confidence by design, flagged for manual entry.
+- Stored in MongoDB `nirf_extractions`; batch job tracked in `nirf_extract_jobs`.
+- Manual corrections (PATCH) flip field to confidence 1.0/method=manual, set status=Reviewed, recompute scores, and are preserved across re-extraction.
+- Admin review screen: `/admin/nirf/review` (`AdminExtract.jsx`) — master list with confidence pills/bars + detail panel with per-field source page, confidence bar, inline edit/save.
+- APIs: `/api/admin/nirf/extract` (+jobs), `/api/admin/nirf/extractions` (+/{id}), `/api/admin/nirf/documents/{id}/extract`, PATCH `/api/admin/nirf/extractions/{id}/field`, `/api/admin/nirf/extract/schema`.
+- Tests: `/app/backend/tests/test_extraction.py` (9 pass). Full backend+frontend verified (iteration_2.json, 100%).
+
+
 ## Prioritized Backlog
+- **DONE (Jun 2026)** — NIRF Data Acquisition admin (scrape/download/track/retry) + **PDF Extraction Engine**
 - **P1**: Hover-tooltip refinements on all factsheet metrics (calculation explainer)
 - **P1**: Persistent comparison state via localStorage
 - **P2**: Insights streaming (currently non-streaming send_message)
