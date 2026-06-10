@@ -31,6 +31,7 @@ export default function Navbar() {
             <Link to="/colleges" className={linkCls("/colleges")} data-testid="nav-colleges">Colleges</Link>
             <Link to="/match" className={linkCls("/match")} data-testid="nav-match">Match Me</Link>
             <Link to="/compare" className={linkCls("/compare")} data-testid="nav-compare">Compare</Link>
+            <Link to="/shortlist" className={linkCls("/shortlist")} data-testid="nav-shortlist">Shortlist</Link>
             <Link to="/methodology" className={linkCls("/methodology")} data-testid="nav-methodology">How We Calculate</Link>
           </nav>
 

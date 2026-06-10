@@ -1,20 +1,42 @@
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import { useParams, Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { getCollege, formatINR, transparencyBand, variance, varianceBand } from "../data/colleges";
 import SourceBadge from "../components/SourceBadge";
 import ScoreBar from "../components/ScoreBar";
 import TransparencyChip from "../components/TransparencyChip";
-import { ArrowUpRight, Download, FileText } from "lucide-react";
+import { ArrowUpRight, Download, FileText, Bookmark, BookmarkCheck, Check } from "lucide-react";
 import {
   microPlacement, microSalary, microHigherStudies, microRatio,
   microCost, microStudents, microFaculty, microDiversity,
   microCareerSuccess, microValueForMoney, microTransparency, microConfidence,
 } from "../lib/microcopy";
+import { useShortlist } from "../lib/shortlistStore";
 
 export default function Factsheet() {
   const { id } = useParams();
   const c = getCollege(id);
+  const sl = useShortlist();
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (c) sl.markViewed(c.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const savedListIds = c ? sl.state.items.filter((i) => i.collegeId === c.id).map((i) => i.listId) : [];
+  const isInAnyList = savedListIds.length > 0;
+  const toggleList = (listId) => {
+    if (!c) return;
+    if (savedListIds.includes(listId)) {
+      const existing = sl.state.items.find((i) => i.collegeId === c.id && i.listId === listId);
+      if (existing) sl.removeItem(existing.id);
+    } else {
+      sl.addToList(c.id, listId);
+    }
+  };
+
   if (!c) {
     return (
       <div className="min-h-screen bg-offwhite">
@@ -68,11 +90,45 @@ export default function Factsheet() {
                 <TransparencyChip value={c.transparency} />
               </div>
             </div>
-            <div className="lg:col-span-4 flex flex-col gap-2 justify-end">
+            <div className="lg:col-span-4 flex flex-col gap-2 justify-end relative">
               <Link to={`/compare?ids=${c.id}`} data-testid="factsheet-compare-btn" className="inline-flex items-center justify-between gap-2 h-11 px-5 bg-navy text-white text-xs">
                 Add to comparison <ArrowUpRight className="w-4 h-4" />
               </Link>
-              <button className="inline-flex items-center justify-between gap-2 h-11 px-5 border border-navy text-navy text-xs hover:bg-navy hover:text-white">
+              <button
+                onClick={() => setPickerOpen((o) => !o)}
+                data-testid="factsheet-save-btn"
+                className={`inline-flex items-center justify-between gap-2 h-11 px-5 border text-xs transition-colors ${isInAnyList ? "border-emerald2 text-emerald2 bg-emerald2/5" : "border-navy text-navy hover:bg-navy hover:text-white"}`}
+              >
+                {isInAnyList ? <>Saved to shortlist <BookmarkCheck className="w-4 h-4" /></> : <>Save to shortlist <Bookmark className="w-4 h-4" /></>}
+              </button>
+              {pickerOpen && (
+                <div className="absolute right-0 top-full mt-2 w-full bg-white border border-navy shadow-xl z-30">
+                  <div className="px-3 py-2 border-b border-border text-[10px] uppercase tracking-wider font-mono text-slate2">Pick a list</div>
+                  {sl.state.lists.map((l) => {
+                    const checked = savedListIds.includes(l.id);
+                    return (
+                      <button
+                        key={l.id}
+                        onClick={() => toggleList(l.id)}
+                        data-testid={`save-to-list-${l.id}`}
+                        className="w-full text-left px-3 py-2 text-xs text-navy hover:bg-offwhite border-b border-border last:border-b-0 flex items-center gap-2"
+                      >
+                        <span className={`w-3.5 h-3.5 border ${checked ? "bg-navy border-navy" : "border-border"} flex items-center justify-center flex-shrink-0`}>
+                          {checked && <Check className="w-2 h-2 text-white" strokeWidth={3} />}
+                        </span>
+                        {l.name}
+                      </button>
+                    );
+                  })}
+                  <Link
+                    to="/shortlist"
+                    className="block px-3 py-2 text-[11px] text-center text-navy hover:text-emerald2 border-t border-border bg-offwhite font-semibold"
+                  >
+                    Open my shortlist →
+                  </Link>
+                </div>
+              )}
+              <button className="inline-flex items-center justify-between gap-2 h-11 px-5 border border-border text-slate2 text-xs hover:border-navy hover:text-navy">
                 Download snapshot <Download className="w-4 h-4" />
               </button>
             </div>

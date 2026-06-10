@@ -238,7 +238,7 @@ export default function Match() {
               <Pick label="Goal" v={GOALS.find((g) => g.id === picks.goal)?.label} />
               <Pick label="Location" v={picks.location} />
               {buckets.locationFellBack && (
-                <span className="text-[11px] text-amber2 ml-auto">Not enough matches in {picks.location} \u2014 showing nationwide.</span>
+                <span className="text-[11px] text-amber2 ml-auto">Not enough matches in {picks.location} — showing nationwide.</span>
               )}
             </div>
 
@@ -248,7 +248,7 @@ export default function Match() {
             <Bucket title="Premium Options" subtitle="Higher cost than your budget, included for context." cards={buckets.premium} picks={picks} bucket="premium" empty="Your budget already covers the premium tier." />
 
             <div className="border-l-2 border-steel bg-white px-5 py-4 text-xs text-slate2 leading-relaxed">
-              <span className="font-semibold text-navy">A small note:</span> We{"\u2019"}re matching your preferences against publicly filed data \u2014 not recommending colleges. Always read the source documents before deciding.
+              <span className="font-semibold text-navy">A small note:</span> We{"\u2019"}re matching your preferences against publicly filed data — not recommending colleges. Always read the source documents before deciding.
             </div>
           </div>
         )}
