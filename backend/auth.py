@@ -7,19 +7,20 @@ All /api/admin/* routes are protected by middleware in server.py.
 """
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import bcrypt
 import jwt
 
+from config import settings
+
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_HOURS = 12
 
 
 def _secret() -> str:
-    return os.environ["JWT_SECRET"]
+    return settings.jwt_secret
 
 
 # ---------------- Password hashing ----------------
@@ -56,6 +57,12 @@ def decode_token(token: str) -> Optional[dict]:
         return None
 
 
+def is_admin_token(token: str) -> bool:
+    """A valid, non-expired access token whose role claim is 'admin'."""
+    payload = decode_token(token)
+    return bool(payload and payload.get("role") == "admin")
+
+
 def bearer_from_header(authorization: str) -> Optional[str]:
     if authorization and authorization.startswith("Bearer "):
         return authorization[7:]
@@ -65,8 +72,8 @@ def bearer_from_header(authorization: str) -> Optional[str]:
 # ---------------- Admin seeding + login ----------------
 async def seed_admin(db) -> None:
     """Idempotent: create the admin if missing; sync password if it changed in .env."""
-    email = os.environ["ADMIN_EMAIL"].lower()
-    password = os.environ["ADMIN_PASSWORD"]
+    email = settings.admin_email.lower()
+    password = settings.admin_password
     existing = await db.users.find_one({"email": email})
     if existing is None:
         await db.users.insert_one({

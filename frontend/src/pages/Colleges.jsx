@@ -1,10 +1,11 @@
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { colleges, formatINR } from "../data/colleges";
 import TransparencyChip from "../components/TransparencyChip";
 import { Link } from "react-router-dom";
-import { Search, ArrowUpRight } from "lucide-react";
+import { Search, ArrowUpRight, Database } from "lucide-react";
+import { fetchLiveColleges } from "../lib/collegesApi";
 
 const TYPES = ["All", "Public", "Private"];
 const SORTS = [
@@ -18,6 +19,13 @@ export default function Colleges() {
   const [q, setQ] = useState("");
   const [type, setType] = useState("All");
   const [sort, setSort] = useState("outcomeScore");
+  const [liveCount, setLiveCount] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchLiveColleges().then((live) => { if (active) setLiveCount(live.length); });
+    return () => { active = false; };
+  }, []);
 
   const rows = useMemo(() => {
     let r = [...colleges];
@@ -38,6 +46,12 @@ export default function Colleges() {
           <div className="text-[10px] uppercase tracking-[0.22em] text-slate2 font-semibold mb-3 font-mono">All Colleges · 16 Indexed</div>
           <h1 className="font-heading text-4xl sm:text-5xl tracking-tighter font-bold">Every college, all the numbers.</h1>
           <p className="mt-3 text-sm text-slate2 max-w-2xl">All 16 colleges with every public number we have. Click any row to open its full snapshot.</p>
+          {liveCount > 0 && (
+            <div data-testid="live-data-banner" className="mt-4 inline-flex items-center gap-2 border border-emerald2/40 bg-emerald2/5 text-emerald2 text-xs px-3 py-2 font-mono">
+              <Database className="w-3.5 h-3.5" />
+              {liveCount} institutions available from the live NIRF pipeline
+            </div>
+          )}
         </div>
 
         {/* Controls */}
