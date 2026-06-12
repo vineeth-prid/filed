@@ -49,8 +49,24 @@ limiter = RateLimiter()
 
 
 def client_ip(request) -> str:
-    """Best-effort client IP, honoring a single X-Forwarded-For hop."""
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """
+    Resolve the real client IP for rate-limiting / lockout purposes.
+
+    SECURITY: X-Forwarded-For is attacker-controllable. We only honour it when
+    the DIRECT socket peer is a configured, trusted reverse proxy (e.g. the local
+    nginx). Otherwise we use the socket peer itself. This prevents header-spoofing
+    from minting a fresh rate-limit bucket on every request.
+    """
+    peer = request.client.host if request.client else "unknown"
+
+    # Import here to avoid any import-order coupling; settings is a cheap singleton.
+    from config import settings
+
+    if settings.trust_proxy_headers and peer in settings.trusted_proxy_ips:
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            # Left-most entry is the originating client when the chain is trusted.
+            first = xff.split(",")[0].strip()
+            if first:
+                return first
+    return peer

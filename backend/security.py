@@ -92,11 +92,15 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         cl = request.headers.get("content-length")
-        if cl and int(cl) > self._max:
-            return JSONResponse(
-                status_code=413,
-                content={"detail": "Request body too large."},
-            )
+        if cl is not None:
+            try:
+                declared = int(cl)
+            except (ValueError, TypeError):
+                return JSONResponse(status_code=400, content={"detail": "Invalid Content-Length."})
+            if declared > self._max:
+                return JSONResponse(status_code=413, content={"detail": "Request body too large."})
+        # NOTE: chunked requests omit Content-Length. The authoritative body cap
+        # MUST also be enforced at nginx (client_max_body_size) — see deploy/nginx.conf.
         return await call_next(request)
 
 

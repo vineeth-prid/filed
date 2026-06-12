@@ -19,13 +19,15 @@ Set in backend/.env:
 """
 from __future__ import annotations
 
-import base64
+import hashlib
+import hmac
 import logging
 import os
 
 logger = logging.getLogger("filed.encryption")
 
 _PREFIX = "enc:"
+_BIDX_PREFIX = "bidx:"
 
 try:
     from cryptography.fernet import Fernet, InvalidToken
@@ -67,6 +69,28 @@ def decrypt(value: str) -> str:
         return value[len(_PREFIX):]   # key not configured; return raw ciphertext (log it)
     try:
         return f.decrypt(value[len(_PREFIX):].encode("ascii")).decode("utf-8")
-    except (InvalidToken, Exception) as exc:
-        logger.error("Failed to decrypt field: %s", exc)
+    except InvalidToken as exc:
+        logger.error("Failed to decrypt field (invalid token): %s", exc)
         return ""        # fail safe — never crash on bad ciphertext
+
+
+def blind_index(value: str) -> str:
+    """
+    Deterministic, keyed lookup token for an encrypted field.
+
+    Fernet ciphertext is randomized, so you cannot query a collection by an
+    encrypted value.  Store this HMAC-SHA256 blind index alongside the encrypted
+    value and query by it instead — equal plaintext always yields the same index,
+    while the index reveals nothing about the plaintext without the key.
+
+    No key configured → returns the normalized plaintext (backwards-compatible,
+    behaves exactly like the pre-encryption system).
+    """
+    if not value:
+        return value
+    norm = value.strip().lower()
+    raw_key = os.environ.get("DB_ENCRYPTION_KEY", "").strip()
+    if not raw_key or not _HAS_CRYPTO:
+        return norm      # plaintext passthrough — same as legacy behaviour
+    digest = hmac.new(raw_key.encode("utf-8"), norm.encode("utf-8"), hashlib.sha256).hexdigest()
+    return _BIDX_PREFIX + digest

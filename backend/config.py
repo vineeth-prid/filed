@@ -83,6 +83,15 @@ class Settings:
         # LLM requests are allowed longer (model inference can take time).
         self.llm_timeout_seconds = int(os.environ.get("LLM_TIMEOUT_SECONDS", "150"))
 
+        # ---- Proxy trust (critical for correct client-IP attribution) ----
+        # X-Forwarded-For is only honoured when the DIRECT peer (the socket the
+        # request actually arrived on) is a trusted reverse proxy.  This stops
+        # attackers from spoofing the header to evade per-IP rate limits and
+        # brute-force lockout.  Default: trust only the local nginx on loopback.
+        self.trust_proxy_headers = os.environ.get("TRUST_PROXY_HEADERS", "true").lower() == "true"
+        raw_proxies = os.environ.get("TRUSTED_PROXY_IPS", "127.0.0.1,::1").strip()
+        self.trusted_proxy_ips = {p.strip() for p in raw_proxies.split(",") if p.strip()}
+
     @property
     def cors_allow_all(self) -> bool:
         """True when no explicit allowlist is configured (wildcard mode)."""

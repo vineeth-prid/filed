@@ -15,7 +15,7 @@ import jwt
 
 from config import settings
 from rate_limit import RateLimiter
-from encryption import encrypt as enc_field, decrypt as dec_field
+from encryption import encrypt as enc_field, decrypt as dec_field, blind_index
 
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_HOURS = 12
@@ -75,32 +75,48 @@ def bearer_from_header(authorization: str) -> Optional[str]:
 
 
 # ---------------- Admin seeding + login ----------------
+async def _find_user_by_email(db, email: str) -> Optional[dict]:
+    """Locate a user by deterministic blind index, with legacy fallbacks.
+
+    Lookup order:
+      1. email_bidx (deterministic HMAC — the supported path)
+      2. legacy plaintext `email` field (pre-encryption rows)
+    Fernet ciphertext is never queried directly because it is non-deterministic.
+    """
+    user = await db.users.find_one({"email_bidx": blind_index(email)})
+    if user is None:
+        user = await db.users.find_one({"email": email})   # legacy plaintext row
+    return user
+
+
 async def seed_admin(db) -> None:
     """Idempotent: create the admin if missing; sync password if it changed in .env."""
     email = settings.admin_email.lower()
     password = settings.admin_password
-    # Email stored encrypted; query by encrypted value.
-    stored_email = enc_field(email)
-    existing = await db.users.find_one({"email": stored_email})
-    # Backwards-compat: also check plaintext email (migration path).
-    if existing is None:
-        existing = await db.users.find_one({"email": email})
-        if existing:
-            # Upgrade plaintext → encrypted in place.
-            await db.users.update_one(
-                {"email": email}, {"$set": {"email": stored_email}}
-            )
+    bidx = blind_index(email)
+
+    existing = await _find_user_by_email(db, email)
     if existing is None:
         await db.users.insert_one({
-            "email": stored_email,
+            "email": enc_field(email),       # encrypted display value
+            "email_bidx": bidx,              # deterministic, queryable
             "password_hash": hash_password(password),
             "name": "Admin",
             "role": "admin",
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
-    elif not verify_password(password, existing.get("password_hash", "")):
-        await db.users.update_one(
-            {"email": stored_email}, {"$set": {"password_hash": hash_password(password)}})
+        return
+
+    # Migrate any legacy row in place (add blind index + encrypt email) and
+    # keep the password in sync with .env.
+    updates: dict = {}
+    if not existing.get("email_bidx"):
+        updates["email_bidx"] = bidx
+        updates["email"] = enc_field(email)
+    if not verify_password(password, existing.get("password_hash", "")):
+        updates["password_hash"] = hash_password(password)
+    if updates:
+        await db.users.update_one({"_id": existing["_id"]}, {"$set": updates})
 
 
 def is_login_locked(ip: str, email: str) -> bool:
@@ -128,16 +144,13 @@ async def authenticate(db, email: str, password: str, ip: str = "unknown") -> Op
     email = (email or "").lower()
     if is_login_locked(ip, email):
         return None  # locked — caller raises 429
-    # Try encrypted email first, fall back to plaintext (migration path).
-    user = await db.users.find_one({"email": enc_field(email)})
-    if user is None:
-        user = await db.users.find_one({"email": email})
+    user = await _find_user_by_email(db, email)
     if not user or not verify_password(password, user.get("password_hash", "")):
         record_login_failure(ip, email)
         return None
     clear_login_failures(ip, email)
     return {
-        "email": dec_field(user["email"]),
+        "email": dec_field(user.get("email", "")),   # decrypts enc:, passes plaintext through
         "name": user.get("name", "Admin"),
         "role": user.get("role", "admin"),
     }

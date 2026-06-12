@@ -811,7 +811,10 @@ async def _ensure_indexes():
     await db.nirf_intelligence_scores.create_index([("year", 1), ("category", 1), ("overall_index", -1)])
     await db.nirf_raw_data.create_index([("document_id", 1), ("version", 1)])
     await db.nirf_yoy_changes.create_index([("year", 1), ("category", 1)])
-    await db.users.create_index([("email", 1)], unique=True)
+    # Uniqueness is enforced on the deterministic blind index, not the encrypted
+    # email (Fernet ciphertext is random, so a unique index on it is meaningless).
+    # sparse=True so any legacy row without the field does not break index creation.
+    await db.users.create_index([("email_bidx", 1)], unique=True, sparse=True)
     for coll in JOB_COLLECTIONS:
         await db[coll].create_index([("created_at", -1)])
         await db[coll].create_index([("id", 1)])
