@@ -747,8 +747,14 @@ async def gate_middleware(request: Request, call_next):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=_CORS_ORIGINS,
+    # Starlette ≥0.30 forbids allow_origins=["*"] + allow_credentials=True.
+    # When a strict allowlist is configured (production), echo the origin and
+    # allow credentials.  When wildcard (dev / no config), use allow_all_origins
+    # without credentials — browsers send cookies anyway on same-origin,
+    # and our auth is Bearer-in-header, not cookies.
+    allow_origins=[] if _CORS_ALLOW_ALL else _CORS_ORIGINS,
+    allow_origin_regex=r".*" if _CORS_ALLOW_ALL else None,
+    allow_credentials=not _CORS_ALLOW_ALL,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -71,6 +71,11 @@ class Settings:
         self.insights_rate_limit_requests = int(os.environ.get("INSIGHTS_RATE_LIMIT_REQUESTS", "5"))
         self.insights_rate_limit_window_seconds = int(os.environ.get("INSIGHTS_RATE_LIMIT_WINDOW_SECONDS", "60"))
 
+    @property
+    def cors_allow_all(self) -> bool:
+        """True when no explicit allowlist is configured (wildcard mode)."""
+        return not bool(self.cors_origins) and not self.is_production
+
     def effective_cors_origins(self) -> list[str]:
         if self.cors_origins:
             return self.cors_origins
@@ -78,6 +83,8 @@ class Settings:
         if self.is_production:
             # Fail closed in production rather than echoing every origin.
             return []
+        # Wildcard dev mode — signal the caller to use allow_origin_regex instead
+        # so Starlette's allow_credentials+wildcard restriction is not triggered.
         return ["*"]
 
 
