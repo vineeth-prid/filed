@@ -1,18 +1,26 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Query
 from fastapi.responses import JSONResponse
-from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import asyncio
-import os
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
+import re
+from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import uuid
 from datetime import datetime, timezone
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from config import settings
+from rate_limit import limiter, client_ip
+from ollama_client import chat as ollama_chat, health_check as ollama_health, OllamaError, parse_json_array
+from security import (
+    SecurityHeadersMiddleware,
+    RequestSizeLimitMiddleware,
+    TimeoutMiddleware,
+    BotShieldMiddleware,
+    AntiScrapingMiddleware,
+    HoneypotMiddleware,
+)
 
 from nirf_service import run_sync, retry_document, CATEGORY_SLUG
 from nirf_extractor import (
@@ -30,19 +38,17 @@ from annual_refresh import (
     _years_with_data, TRACKED_METRICS,
 )
 from auth import (
-    create_access_token, decode_token, bearer_from_header, seed_admin, authenticate,
+    create_access_token, decode_token, is_admin_token, bearer_from_header,
+    seed_admin, authenticate, is_login_locked,
 )
 
 
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / ".env")
-
 # MongoDB connection
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
+client = AsyncIOMotorClient(settings.mongo_url)
+db = client[settings.db_name]
 
-EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+# Bound every paginated query so a client cannot request the whole collection.
+MAX_PAGE_SIZE = 500
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -57,22 +63,18 @@ def _spawn(coro):
     task.add_done_callback(_background_tasks.discard)
     return task
 
-app = FastAPI(title="Filed — Education Due Diligence API")
+app = FastAPI(
+    title="Filed — Education Due Diligence API",
+    # Disable auto-generated Swagger/OpenAPI docs in production to avoid
+    # exposing the full API schema to attackers.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
+)
 api_router = APIRouter(prefix="/api")
 
 
 # ---------- Models ----------
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-class StatusCheckCreate(BaseModel):
-    client_name: str
-
-
 class InsightRequest(BaseModel):
     colleges: List[Dict[str, Any]]
     context: str | None = None
@@ -95,10 +97,17 @@ class LoginRequest(BaseModel):
 
 
 @api_router.post("/auth/login")
-async def auth_login(req: LoginRequest):
-    user = await authenticate(db, req.email, req.password)
+async def auth_login(req: LoginRequest, request: Request):
+    ip = client_ip(request)
+    if is_login_locked(ip, req.email):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed attempts. Please wait 15 minutes before trying again.",
+        )
+    user = await authenticate(db, req.email, req.password, ip=ip)
     if not user:
-        raise HTTPException(401, "Invalid email or password")
+        # Generic message — never reveal which of email/password was wrong.
+        raise HTTPException(401, "Invalid credentials")
     token = create_access_token(user["email"], user["role"])
     return {"access_token": token, "token_type": "bearer", "user": user}
 
@@ -118,30 +127,40 @@ async def auth_logout():
     return {"ok": True}
 
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(payload: StatusCheckCreate):
-    status_obj = StatusCheck(**payload.model_dump())
-    doc = status_obj.model_dump()
-    doc["timestamp"] = doc["timestamp"].isoformat()
-    await db.status_checks.insert_one(doc)
-    return status_obj
+@api_router.get("/admin/llm/health")
+async def llm_health():
+    """Check that the local Ollama daemon is reachable and the model is loaded."""
+    return await ollama_health()
 
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    rows = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    for r in rows:
-        if isinstance(r.get("timestamp"), str):
-            r["timestamp"] = datetime.fromisoformat(r["timestamp"])
-    return rows
+def _clip(value: Any) -> Any:
+    """Truncate attacker-controlled strings before they reach the LLM prompt."""
+    if isinstance(value, str):
+        return value[: settings.insights_max_field_len]
+    return value
 
 
 @api_router.post("/insights", response_model=InsightResponse)
-async def generate_insights(req: InsightRequest):
-    if not EMERGENT_LLM_KEY:
-        raise HTTPException(status_code=500, detail="LLM key not configured")
+async def generate_insights(req: InsightRequest, request: Request):
+    # Rate limit this expensive endpoint per client IP (LLM cost-abuse guard).
+    if not limiter.check(
+        f"insights:{client_ip(request)}",
+        settings.insights_rate_limit_requests,
+        settings.insights_rate_limit_window_seconds,
+    ):
+        raise HTTPException(status_code=429, detail="Too many requests. Please slow down.")
+
     if not req.colleges:
         raise HTTPException(status_code=400, detail="No colleges provided")
+    if len(req.colleges) > settings.insights_max_colleges:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many colleges (max {settings.insights_max_colleges}).",
+        )
+    # Sanitize untrusted input: keep only known keys, clip string lengths.
+    req.colleges = [{k: _clip(v) for k, v in c.items()} for c in req.colleges]
+    if req.context:
+        req.context = _clip(req.context)
 
     # Build compact data snapshot for LLM
     snapshot_lines = []
@@ -180,31 +199,16 @@ async def generate_insights(req: InsightRequest):
         f"Return ONLY a JSON array of 5 strings."
     )
 
-    session_id = f"insights-{uuid.uuid4()}"
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=session_id,
-            system_message=system,
-        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
-
-        raw = await chat.send_message(UserMessage(text=user_prompt))
-        text = raw if isinstance(raw, str) else str(raw)
-
-        # Extract JSON array
-        import json
-        import re
-        match = re.search(r"\[.*\]", text, re.S)
-        if match:
-            insights = json.loads(match.group(0))
-            insights = [str(s).strip() for s in insights if str(s).strip()]
-        else:
-            # Fallback: split lines
-            insights = [ln.strip("-• \t") for ln in text.splitlines() if ln.strip()][:5]
+        raw = await ollama_chat(system, user_prompt)
+        insights = parse_json_array(raw)
         return InsightResponse(insights=insights[:5])
+    except OllamaError as e:
+        logger.error("Insight generation failed (Ollama): %s", e)
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        logger.error(f"Insight generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Insight generation failed: {str(e)}")
+        logger.error("Insight generation failed: %s", e)
+        raise HTTPException(status_code=500, detail="Insight generation failed.")
 
 
 # ----------------- NIRF Data Acquisition -----------------
@@ -265,7 +269,7 @@ async def trigger_sync(req: SyncRequest):
 
 
 @api_router.get("/admin/nirf/jobs")
-async def list_jobs(limit: int = 20):
+async def list_jobs(limit: int = Query(20, ge=1, le=MAX_PAGE_SIZE)):
     rows = await db.nirf_jobs.find({}, {"_id": 0}).sort("created_at", -1).to_list(limit)
     return rows
 
@@ -279,20 +283,22 @@ async def get_job(job_id: str):
 
 
 @api_router.get("/admin/nirf/institutions")
-async def list_institutions(year: Optional[int] = None, category: Optional[str] = None, q: Optional[str] = None, limit: int = 200):
+async def list_institutions(year: Optional[int] = None, category: Optional[str] = None, q: Optional[str] = None,
+                            limit: int = Query(200, ge=1, le=MAX_PAGE_SIZE), offset: int = Query(0, ge=0)):
     query: dict = {}
     if year:
         query["year"] = year
     if category:
         query["category"] = category
     if q:
-        query["college_name"] = {"$regex": q, "$options": "i"}
-    rows = await db.nirf_institutions.find(query, {"_id": 0}).sort("rank", 1).to_list(limit)
+        query["college_name"] = {"$regex": re.escape(q), "$options": "i"}
+    rows = await db.nirf_institutions.find(query, {"_id": 0}).sort("rank", 1).skip(offset).to_list(limit)
     return rows
 
 
 @api_router.get("/admin/nirf/documents")
-async def list_documents(status: Optional[str] = None, year: Optional[int] = None, category: Optional[str] = None, limit: int = 500):
+async def list_documents(status: Optional[str] = None, year: Optional[int] = None, category: Optional[str] = None,
+                         limit: int = Query(500, ge=1, le=MAX_PAGE_SIZE), offset: int = Query(0, ge=0)):
     query: dict = {}
     if status:
         query["status"] = status
@@ -300,7 +306,7 @@ async def list_documents(status: Optional[str] = None, year: Optional[int] = Non
         query["year"] = year
     if category:
         query["category"] = category
-    rows = await db.nirf_documents.find(query, {"_id": 0}).sort("updated_at", -1).to_list(limit)
+    rows = await db.nirf_documents.find(query, {"_id": 0}).sort("updated_at", -1).skip(offset).to_list(limit)
 
     counts = {"Pending": 0, "Downloaded": 0, "Failed": 0}
     pipeline_query: dict = {}
@@ -370,13 +376,14 @@ async def get_extract_job(job_id: str):
 
 
 @api_router.get("/admin/nirf/extractions")
-async def list_extractions(year: Optional[int] = None, category: Optional[str] = None, limit: int = 500):
+async def list_extractions(year: Optional[int] = None, category: Optional[str] = None,
+                           limit: int = Query(500, ge=1, le=MAX_PAGE_SIZE), offset: int = Query(0, ge=0)):
     query: dict = {}
     if year:
         query["year"] = year
     if category:
         query["category"] = category
-    rows = await db.nirf_extractions.find(query, {"_id": 0}).sort("overall_confidence", 1).to_list(limit)
+    rows = await db.nirf_extractions.find(query, {"_id": 0}).sort("overall_confidence", 1).skip(offset).to_list(limit)
     summary = {"total": len(rows), "High": 0, "Medium": 0, "Low": 0, "Reviewed": 0}
     for r in rows:
         summary[_confidence_band(r.get("overall_confidence", 0))] += 1
@@ -466,13 +473,14 @@ async def normalize_one_doc(document_id: str):
 
 
 @api_router.get("/admin/nirf/derived-metrics")
-async def list_derived_metrics(year: Optional[int] = None, category: Optional[str] = None, limit: int = 500):
+async def list_derived_metrics(year: Optional[int] = None, category: Optional[str] = None,
+                               limit: int = Query(500, ge=1, le=MAX_PAGE_SIZE), offset: int = Query(0, ge=0)):
     query: dict = {}
     if year:
         query["year"] = year
     if category:
         query["category"] = category
-    rows = await db.nirf_derived_metrics.find(query, {"_id": 0}).sort("avg_confidence", -1).to_list(limit)
+    rows = await db.nirf_derived_metrics.find(query, {"_id": 0}).sort("avg_confidence", -1).skip(offset).to_list(limit)
     return {"derived_metrics": rows, "count": len(rows)}
 
 
@@ -537,13 +545,14 @@ async def get_intelligence_job(job_id: str):
 
 
 @api_router.get("/admin/nirf/intelligence")
-async def list_intelligence(year: Optional[int] = None, category: Optional[str] = None, limit: int = 500):
+async def list_intelligence(year: Optional[int] = None, category: Optional[str] = None,
+                            limit: int = Query(500, ge=1, le=MAX_PAGE_SIZE), offset: int = Query(0, ge=0)):
     query: dict = {}
     if year:
         query["year"] = year
     if category:
         query["category"] = category
-    rows = await db.nirf_intelligence_scores.find(query, {"_id": 0}).sort("overall_index", -1).to_list(limit)
+    rows = await db.nirf_intelligence_scores.find(query, {"_id": 0}).sort("overall_index", -1).skip(offset).to_list(limit)
     return {"intelligence": rows, "count": len(rows)}
 
 
@@ -610,7 +619,7 @@ async def list_years(category: str = "Engineering"):
 
 
 @api_router.get("/admin/nirf/changes")
-async def list_changes(year: int, category: str = "Engineering", limit: int = 500):
+async def list_changes(year: int, category: str = "Engineering", limit: int = Query(500, ge=1, le=MAX_PAGE_SIZE)):
     rows = await db.nirf_yoy_changes.find({"year": year, "category": category}, {"_id": 0}).to_list(limit)
     prev = rows[0]["previous_year"] if rows else None
 
@@ -636,33 +645,197 @@ async def trends(category: str = "Engineering", metric: str = "median_salary"):
 # ----------------- /Refresh -----------------
 
 
+# ----------------- Public read-only product data -----------------
+# Bridges the admin pipeline's computed output to the public site so the
+# user-facing product can render REAL institutional data (intelligence scores
+# + derived metrics) instead of only the static mock dataset.
+def _derived_value(metrics: dict, key: str):
+    m = (metrics or {}).get(key) or {}
+    return m.get("value")
+
+
+async def _public_college_view(score_doc: dict) -> dict:
+    document_id = score_doc.get("document_id")
+    dm = await db.nirf_derived_metrics.find_one({"document_id": document_id}, {"_id": 0}) or {}
+    metrics = dm.get("metrics", {})
+    inst = await db.nirf_institutions.find_one(
+        {"institute_id": dm.get("institute_id") or score_doc.get("institute_id")},
+        {"_id": 0},
+    ) or {}
+    scores = {s.get("key", s.get("label")): {"value": s.get("value"), "grade": s.get("grade")}
+              for s in score_doc.get("scores", [])}
+    return {
+        "id": document_id,
+        "name": score_doc.get("college_name") or dm.get("college_name"),
+        "city": inst.get("city"),
+        "state": inst.get("state"),
+        "year": score_doc.get("year"),
+        "category": score_doc.get("category"),
+        "rank": inst.get("rank"),
+        "overallIndex": score_doc.get("overall_index"),
+        "overallGrade": score_doc.get("overall_grade"),
+        "scores": scores,
+        "placementRate": _derived_value(metrics, "placement_rate_overall"),
+        "higherStudies": _derived_value(metrics, "higher_studies_rate_overall"),
+        "facultyRatio": _derived_value(metrics, "faculty_ratio"),
+        "fees": dm.get("fees"),
+        "sources": [f"NIRF {score_doc.get('year')}"],
+        "dataOrigin": "pipeline",
+    }
+
+
+@api_router.get("/colleges")
+async def public_colleges(year: int = 2024, category: str = "Engineering",
+                          limit: int = Query(100, ge=1, le=MAX_PAGE_SIZE), offset: int = Query(0, ge=0)):
+    """Public, read-only list of institutions with computed intelligence scores."""
+    rows = await db.nirf_intelligence_scores.find(
+        {"year": year, "category": category}, {"_id": 0},
+    ).sort("overall_index", -1).skip(offset).to_list(limit)
+    colleges = [await _public_college_view(r) for r in rows]
+    return {"colleges": colleges, "count": len(colleges)}
+
+
+@api_router.get("/colleges/{document_id}")
+async def public_college(document_id: str):
+    score_doc = await db.nirf_intelligence_scores.find_one({"document_id": document_id}, {"_id": 0})
+    if not score_doc:
+        raise HTTPException(404, "College not found in computed dataset")
+    return await _public_college_view(score_doc)
+# ----------------- /Public -----------------
+
+
 app.include_router(api_router)
 
 
-# Protect every /api/admin/* route with admin JWT (login/auth routes stay open).
+_CORS_ORIGINS = settings.effective_cors_origins()
+_CORS_ALLOW_ALL = _CORS_ORIGINS == ["*"]
+
+
+def _cors_headers(request: Request) -> dict:
+    """Echo CORS headers onto early (pre-handler) responses like 401/429,
+    so browser clients receive a usable error instead of an opaque CORS failure."""
+    origin = request.headers.get("origin")
+    if not origin:
+        return {}
+    if _CORS_ALLOW_ALL or origin in _CORS_ORIGINS:
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Vary": "Origin",
+        }
+    return {}
+
+
+# Coarse global per-IP rate limit, then admin JWT (with role check) on /api/admin/*.
 @app.middleware("http")
-async def admin_auth_middleware(request: Request, call_next):
+async def gate_middleware(request: Request, call_next):
     path = request.url.path
+    if path.startswith("/api/") and request.method != "OPTIONS":
+        if not limiter.check(
+            f"global:{client_ip(request)}",
+            settings.rate_limit_requests,
+            settings.rate_limit_window_seconds,
+        ):
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please slow down."},
+                headers=_cors_headers(request),
+            )
+
     if path.startswith("/api/admin") and request.method != "OPTIONS":
         token = bearer_from_header(request.headers.get("Authorization", ""))
-        if not token or not decode_token(token):
-            return JSONResponse(status_code=401, content={"detail": "Admin authentication required"})
+        if not token or not is_admin_token(token):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Admin authentication required"},
+                headers=_cors_headers(request),
+            )
     return await call_next(request)
 
 
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    # Starlette ≥0.30 forbids allow_origins=["*"] + allow_credentials=True.
+    allow_origins=[] if _CORS_ALLOW_ALL else _CORS_ORIGINS,
+    allow_origin_regex=r".*" if _CORS_ALLOW_ALL else None,
+    allow_credentials=not _CORS_ALLOW_ALL,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Security middleware — registered last so they execute FIRST (Starlette LIFO).
+# Order (outermost → innermost): Honeypot → BotShield → AntiScraping →
+#   Timeout → RequestSizeLimit → SecurityHeaders → CORS → gate_middleware → routes
+app.add_middleware(SecurityHeadersMiddleware, is_production=settings.is_production)
+app.add_middleware(RequestSizeLimitMiddleware, max_bytes=settings.max_request_body_bytes)
+app.add_middleware(TimeoutMiddleware, timeout_seconds=settings.request_timeout_seconds)
+app.add_middleware(BotShieldMiddleware)
+app.add_middleware(AntiScrapingMiddleware)
+app.add_middleware(HoneypotMiddleware)
+
+
+JOB_COLLECTIONS = [
+    "nirf_jobs", "nirf_extract_jobs", "nirf_normalize_jobs",
+    "nirf_intelligence_jobs", "nirf_refresh_jobs",
+]
+
+
+async def _reconcile_orphaned_jobs():
+    """Background jobs run in-process and do not survive a restart. Any job left
+    'Queued'/'Running' after a crash/redeploy is stuck forever — mark it Interrupted."""
+    total = 0
+    for coll in JOB_COLLECTIONS:
+        res = await db[coll].update_many(
+            {"status": {"$in": ["Queued", "Running"]}},
+            {"$set": {
+                "status": "Interrupted",
+                "error": "Server restarted while job was in progress.",
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        total += res.modified_count
+    if total:
+        logger.info(f"Reconciled {total} orphaned job(s) to Interrupted")
+
+
+async def _ensure_indexes():
+    """Indexes backing the common (year, category, status) filters + sorts."""
+    await db.nirf_institutions.create_index([("year", 1), ("category", 1), ("rank", 1)])
+    await db.nirf_institutions.create_index([("institute_id", 1), ("year", 1), ("category", 1)], unique=True)
+    await db.nirf_documents.create_index([("year", 1), ("category", 1), ("status", 1)])
+    await db.nirf_documents.create_index([("id", 1)])
+    await db.nirf_extractions.create_index([("year", 1), ("category", 1), ("overall_confidence", 1)])
+    await db.nirf_extractions.create_index([("document_id", 1)])
+    await db.nirf_derived_metrics.create_index([("year", 1), ("category", 1)])
+    await db.nirf_derived_metrics.create_index([("document_id", 1)])
+    await db.nirf_intelligence_scores.create_index([("year", 1), ("category", 1), ("overall_index", -1)])
+    await db.nirf_raw_data.create_index([("document_id", 1), ("version", 1)])
+    await db.nirf_yoy_changes.create_index([("year", 1), ("category", 1)])
+    # Uniqueness is enforced on the deterministic blind index, not the encrypted
+    # email (Fernet ciphertext is random, so a unique index on it is meaningless).
+    # sparse=True so any legacy row without the field does not break index creation.
+    await db.users.create_index([("email_bidx", 1)], unique=True, sparse=True)
+    for coll in JOB_COLLECTIONS:
+        await db[coll].create_index([("created_at", -1)])
+        await db[coll].create_index([("id", 1)])
 
 
 @app.on_event("startup")
 async def on_startup():
     await seed_admin(db)
-    logger.info("Admin account seeded / verified")
+    await _ensure_indexes()
+    await _reconcile_orphaned_jobs()
+    llm_status = await ollama_health()
+    if llm_status["ok"] and llm_status.get("model_ready"):
+        logger.info("Ollama ready — model: %s", settings.ollama_model)
+    else:
+        logger.warning(
+            "Ollama not ready at startup: %s. "
+            "Run: ollama pull %s",
+            llm_status.get("error", "model not found"),
+            settings.ollama_model,
+        )
+    logger.info("Startup complete: admin verified, indexes ensured, orphan jobs reconciled")
 
 
 @app.on_event("shutdown")
