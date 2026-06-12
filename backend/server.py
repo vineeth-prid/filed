@@ -10,10 +10,17 @@ from typing import List, Dict, Any, Optional
 import uuid
 from datetime import datetime, timezone
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
-
 from config import settings
 from rate_limit import limiter, client_ip
+from ollama_client import chat as ollama_chat, health_check as ollama_health, OllamaError, parse_json_array
+from security import (
+    SecurityHeadersMiddleware,
+    RequestSizeLimitMiddleware,
+    TimeoutMiddleware,
+    BotShieldMiddleware,
+    AntiScrapingMiddleware,
+    HoneypotMiddleware,
+)
 
 from nirf_service import run_sync, retry_document, CATEGORY_SLUG
 from nirf_extractor import (
@@ -32,15 +39,13 @@ from annual_refresh import (
 )
 from auth import (
     create_access_token, decode_token, is_admin_token, bearer_from_header,
-    seed_admin, authenticate,
+    seed_admin, authenticate, is_login_locked,
 )
 
 
 # MongoDB connection
 client = AsyncIOMotorClient(settings.mongo_url)
 db = client[settings.db_name]
-
-EMERGENT_LLM_KEY = settings.emergent_llm_key
 
 # Bound every paginated query so a client cannot request the whole collection.
 MAX_PAGE_SIZE = 500
@@ -58,7 +63,14 @@ def _spawn(coro):
     task.add_done_callback(_background_tasks.discard)
     return task
 
-app = FastAPI(title="Filed — Education Due Diligence API")
+app = FastAPI(
+    title="Filed — Education Due Diligence API",
+    # Disable auto-generated Swagger/OpenAPI docs in production to avoid
+    # exposing the full API schema to attackers.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
+)
 api_router = APIRouter(prefix="/api")
 
 
@@ -85,10 +97,17 @@ class LoginRequest(BaseModel):
 
 
 @api_router.post("/auth/login")
-async def auth_login(req: LoginRequest):
-    user = await authenticate(db, req.email, req.password)
+async def auth_login(req: LoginRequest, request: Request):
+    ip = client_ip(request)
+    if is_login_locked(ip, req.email):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed attempts. Please wait 15 minutes before trying again.",
+        )
+    user = await authenticate(db, req.email, req.password, ip=ip)
     if not user:
-        raise HTTPException(401, "Invalid email or password")
+        # Generic message — never reveal which of email/password was wrong.
+        raise HTTPException(401, "Invalid credentials")
     token = create_access_token(user["email"], user["role"])
     return {"access_token": token, "token_type": "bearer", "user": user}
 
@@ -108,6 +127,12 @@ async def auth_logout():
     return {"ok": True}
 
 
+@api_router.get("/admin/llm/health")
+async def llm_health():
+    """Check that the local Ollama daemon is reachable and the model is loaded."""
+    return await ollama_health()
+
+
 def _clip(value: Any) -> Any:
     """Truncate attacker-controlled strings before they reach the LLM prompt."""
     if isinstance(value, str):
@@ -125,8 +150,6 @@ async def generate_insights(req: InsightRequest, request: Request):
     ):
         raise HTTPException(status_code=429, detail="Too many requests. Please slow down.")
 
-    if not EMERGENT_LLM_KEY:
-        raise HTTPException(status_code=500, detail="LLM key not configured")
     if not req.colleges:
         raise HTTPException(status_code=400, detail="No colleges provided")
     if len(req.colleges) > settings.insights_max_colleges:
@@ -176,31 +199,16 @@ async def generate_insights(req: InsightRequest, request: Request):
         f"Return ONLY a JSON array of 5 strings."
     )
 
-    session_id = f"insights-{uuid.uuid4()}"
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=session_id,
-            system_message=system,
-        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
-
-        raw = await chat.send_message(UserMessage(text=user_prompt))
-        text = raw if isinstance(raw, str) else str(raw)
-
-        # Extract JSON array
-        import json
-        import re
-        match = re.search(r"\[.*\]", text, re.S)
-        if match:
-            insights = json.loads(match.group(0))
-            insights = [str(s).strip() for s in insights if str(s).strip()]
-        else:
-            # Fallback: split lines
-            insights = [ln.strip("-• \t") for ln in text.splitlines() if ln.strip()][:5]
+        raw = await ollama_chat(system, user_prompt)
+        insights = parse_json_array(raw)
         return InsightResponse(insights=insights[:5])
+    except OllamaError as e:
+        logger.error("Insight generation failed (Ollama): %s", e)
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        logger.error(f"Insight generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Insight generation failed: {str(e)}")
+        logger.error("Insight generation failed: %s", e)
+        raise HTTPException(status_code=500, detail="Insight generation failed.")
 
 
 # ----------------- NIRF Data Acquisition -----------------
@@ -748,16 +756,22 @@ async def gate_middleware(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     # Starlette ≥0.30 forbids allow_origins=["*"] + allow_credentials=True.
-    # When a strict allowlist is configured (production), echo the origin and
-    # allow credentials.  When wildcard (dev / no config), use allow_all_origins
-    # without credentials — browsers send cookies anyway on same-origin,
-    # and our auth is Bearer-in-header, not cookies.
     allow_origins=[] if _CORS_ALLOW_ALL else _CORS_ORIGINS,
     allow_origin_regex=r".*" if _CORS_ALLOW_ALL else None,
     allow_credentials=not _CORS_ALLOW_ALL,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Security middleware — registered last so they execute FIRST (Starlette LIFO).
+# Order (outermost → innermost): Honeypot → BotShield → AntiScraping →
+#   Timeout → RequestSizeLimit → SecurityHeaders → CORS → gate_middleware → routes
+app.add_middleware(SecurityHeadersMiddleware, is_production=settings.is_production)
+app.add_middleware(RequestSizeLimitMiddleware, max_bytes=settings.max_request_body_bytes)
+app.add_middleware(TimeoutMiddleware, timeout_seconds=settings.request_timeout_seconds)
+app.add_middleware(BotShieldMiddleware)
+app.add_middleware(AntiScrapingMiddleware)
+app.add_middleware(HoneypotMiddleware)
 
 
 JOB_COLLECTIONS = [
@@ -808,6 +822,16 @@ async def on_startup():
     await seed_admin(db)
     await _ensure_indexes()
     await _reconcile_orphaned_jobs()
+    llm_status = await ollama_health()
+    if llm_status["ok"] and llm_status.get("model_ready"):
+        logger.info("Ollama ready — model: %s", settings.ollama_model)
+    else:
+        logger.warning(
+            "Ollama not ready at startup: %s. "
+            "Run: ollama pull %s",
+            llm_status.get("error", "model not found"),
+            settings.ollama_model,
+        )
     logger.info("Startup complete: admin verified, indexes ensured, orphan jobs reconciled")
 
 

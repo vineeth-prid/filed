@@ -17,7 +17,7 @@ class RateLimiter:
         self._lock = threading.Lock()
 
     def check(self, key: str, limit: int, window_seconds: int) -> bool:
-        """Return True if the request is allowed, False if rate-limited."""
+        """Consume one slot. Return True if the request is allowed, False if rate-limited."""
         now = time.monotonic()
         cutoff = now - window_seconds
         with self._lock:
@@ -28,6 +28,21 @@ class RateLimiter:
                 return False
             q.append(now)
             return True
+
+    def peek(self, key: str, limit: int, window_seconds: int) -> bool:
+        """Return True if the next check() would succeed, WITHOUT consuming a slot."""
+        now = time.monotonic()
+        cutoff = now - window_seconds
+        with self._lock:
+            q = self._hits[key]
+            while q and q[0] < cutoff:
+                q.popleft()
+            return len(q) < limit
+
+    def reset(self, key: str) -> None:
+        """Clear all recorded hits for a key (e.g. after a successful login)."""
+        with self._lock:
+            self._hits.pop(key, None)
 
 
 limiter = RateLimiter()

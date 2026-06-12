@@ -33,10 +33,13 @@ pytesseract==0.3.13
 pdf2image==1.17.0
 opencv-python-headless==4.13.0.92
 
-# --- LLM (Emergent universal key wrapper). emergentintegrations depends on
-#     the Emergent-hosted litellm wheel below; keep both pinned together. ---
-emergentintegrations==0.2.0
-litellm @ https://customer-assets.emergentagent.com/internal-asset/library/litellm-1.80.0-py3-none-any.whl#sha256=adf398c513273de9341f61822296c6b2145f7f2dc4a69daf3ac04829f5bde3f8
+# --- LLM — local Ollama (no cloud API key, no third-party wheel) ---
+# The Ollama daemon handles model inference; we only need httpx (already listed above)
+# to call the local REST API.  No extra Python package required.
+# If you prefer the official SDK:  ollama==0.2.1  (optional, not used here)
+
+# --- Encryption (field-level at-rest encryption for sensitive DB fields) ---
+cryptography==48.0.0
 
 # --- Test / lint (dev) ---
 pytest==9.0.3

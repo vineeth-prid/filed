@@ -53,23 +53,35 @@ class Settings:
         self.admin_email = _require("ADMIN_EMAIL")
         self.admin_password = _require("ADMIN_PASSWORD")
 
-        self.emergent_llm_key = os.environ.get("EMERGENT_LLM_KEY", "")
+        # ---- Ollama (local LLM) ----
+        self.ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+        self.ollama_model    = os.environ.get("OLLAMA_MODEL", "llama3.2")
+        self.ollama_timeout  = int(os.environ.get("OLLAMA_TIMEOUT", "120"))
 
-        # CORS: comma-separated allowlist. "*" is allowed only in dev.
+        # ---- CORS ----
         raw_cors = os.environ.get("CORS_ORIGINS", "").strip()
         self.cors_origins = [o.strip() for o in raw_cors.split(",") if o.strip()]
         self.is_production = os.environ.get("ENVIRONMENT", "development").lower() == "production"
 
-        # Input caps for the public insights endpoint.
+        # ---- Input caps for the public insights endpoint ----
         self.insights_max_colleges = int(os.environ.get("INSIGHTS_MAX_COLLEGES", "8"))
         self.insights_max_field_len = int(os.environ.get("INSIGHTS_MAX_FIELD_LEN", "120"))
 
-        # Simple per-IP rate limiting (requests per window-seconds).
-        self.rate_limit_requests = int(os.environ.get("RATE_LIMIT_REQUESTS", "30"))
-        self.rate_limit_window_seconds = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
-        # Tighter limit for the expensive LLM endpoint.
-        self.insights_rate_limit_requests = int(os.environ.get("INSIGHTS_RATE_LIMIT_REQUESTS", "5"))
+        # ---- Global per-IP rate limiting ----
+        self.rate_limit_requests        = int(os.environ.get("RATE_LIMIT_REQUESTS", "60"))
+        self.rate_limit_window_seconds  = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
+        self.insights_rate_limit_requests       = int(os.environ.get("INSIGHTS_RATE_LIMIT_REQUESTS", "5"))
         self.insights_rate_limit_window_seconds = int(os.environ.get("INSIGHTS_RATE_LIMIT_WINDOW_SECONDS", "60"))
+
+        # ---- Brute-force login protection ----
+        self.login_max_attempts      = int(os.environ.get("LOGIN_MAX_ATTEMPTS", "5"))
+        self.login_lockout_seconds   = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "900"))  # 15 min
+
+        # ---- Request safety ----
+        self.max_request_body_bytes = int(os.environ.get("MAX_REQUEST_BODY_BYTES", str(64 * 1024)))  # 64 KB
+        self.request_timeout_seconds = int(os.environ.get("REQUEST_TIMEOUT_SECONDS", "30"))
+        # LLM requests are allowed longer (model inference can take time).
+        self.llm_timeout_seconds = int(os.environ.get("LLM_TIMEOUT_SECONDS", "150"))
 
     @property
     def cors_allow_all(self) -> bool:
