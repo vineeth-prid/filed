@@ -18,6 +18,8 @@ import AdminIntelligence from "./pages/AdminIntelligence";
 import AdminRefresh from "./pages/AdminRefresh";
 import AdminHome from "./pages/AdminHome";
 import AdminLogin from "./pages/AdminLogin";
+import AdminSources from "./pages/AdminSources";
+import AdminAICTE from "./pages/AdminAICTE";
 
 const protect = (el) => <ProtectedRoute>{el}</ProtectedRoute>;
 
@@ -42,6 +44,8 @@ function App() {
             <Route path="/admin/nirf/metrics" element={protect(<AdminMetrics />)} />
             <Route path="/admin/nirf/intelligence" element={protect(<AdminIntelligence />)} />
             <Route path="/admin/nirf/refresh" element={protect(<AdminRefresh />)} />
+            <Route path="/admin/sources" element={protect(<AdminSources />)} />
+            <Route path="/admin/aicte" element={protect(<AdminAICTE />)} />
           </Routes>
         </AuthProvider>
       </BrowserRouter>

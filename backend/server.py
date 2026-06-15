@@ -41,6 +41,8 @@ from auth import (
     create_access_token, decode_token, is_admin_token, bearer_from_header,
     seed_admin, authenticate, is_login_locked,
 )
+import data_sources_service as ds
+import aicte_connector
 
 
 # MongoDB connection
@@ -704,6 +706,181 @@ async def public_college(document_id: str):
 # ----------------- /Public -----------------
 
 
+# ============================================================================
+# Data Sources Management Layer (source-independent) + AICTE Connector
+# Additive only — does not touch any existing NIRF route, collection or workflow.
+# ============================================================================
+class SourceSyncRequest(BaseModel):
+    academic_year: Optional[str] = None
+    run_type: str = "manual"
+
+
+class AicteSyncRequest(BaseModel):
+    academic_year: Optional[str] = None
+    run_type: str = "manual"
+
+
+class AicteEndpointRequest(BaseModel):
+    endpoint_name: str
+    category: str
+    endpoint_url: Optional[str] = None
+    active: bool = True
+
+
+class AicteEndpointPatch(BaseModel):
+    active: Optional[bool] = None
+    endpoint_name: Optional[str] = None
+    endpoint_url: Optional[str] = None
+
+
+# ---------------- Data Sources ----------------
+@api_router.get("/admin/sources")
+async def admin_list_sources():
+    return {"sources": await ds.list_sources(db)}
+
+
+@api_router.get("/admin/sources/{source_id}")
+async def admin_get_source(source_id: str):
+    src = await ds.get_source(db, source_id)
+    if not src:
+        raise HTTPException(404, "Data source not found")
+    conn = ds.CONNECTORS.get(src["source_type"])
+    stats = await conn["stats"](db, src) if conn else {"records": 0, "years_available": []}
+    return {**src, **stats}
+
+
+@api_router.post("/admin/sources/{source_id}/sync")
+async def admin_sync_source(source_id: str, req: SourceSyncRequest):
+    src = await ds.get_source(db, source_id)
+    if not src:
+        raise HTTPException(404, "Data source not found")
+    if src["source_type"] not in ds.CONNECTORS:
+        raise HTTPException(400, f"No connector registered for '{src['source_type']}'")
+    params = {"academic_year": req.academic_year, "run_type": req.run_type}
+    run_id = await ds.create_run(db, src, run_type=req.run_type, params=params)
+    _spawn(ds.run_source_sync(db, src, run_id, params))
+    return {"run_id": run_id, "status": "Queued", "source_type": src["source_type"]}
+
+
+@api_router.get("/admin/sources/{source_id}/runs")
+async def admin_source_runs(source_id: str, limit: int = Query(50, ge=1, le=MAX_PAGE_SIZE)):
+    return {"runs": await ds.list_runs(db, source_id=source_id, limit=limit)}
+
+
+# ---------------- Sync Runs (common: history / logs / monitoring) ----------------
+@api_router.get("/admin/sync-runs")
+async def admin_sync_runs(limit: int = Query(50, ge=1, le=MAX_PAGE_SIZE)):
+    return {"runs": await ds.list_runs(db, limit=limit)}
+
+
+@api_router.get("/admin/sync-runs/{run_id}")
+async def admin_sync_run(run_id: str):
+    run = await ds.get_run(db, run_id)
+    if not run:
+        raise HTTPException(404, "Sync run not found")
+    return run
+
+
+@api_router.get("/admin/monitoring")
+async def admin_monitoring():
+    return await ds.monitoring_summary(db)
+
+
+# ---------------- AICTE ----------------
+@api_router.get("/admin/aicte/overview")
+async def admin_aicte_overview():
+    return await aicte_connector.overview(db)
+
+
+@api_router.get("/admin/aicte/sources")
+async def admin_aicte_sources():
+    rows = await db.aicte_api_sources.find({}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    return {"endpoints": rows}
+
+
+@api_router.post("/admin/aicte/sources")
+async def admin_aicte_add_source(req: AicteEndpointRequest):
+    row = {
+        "id": str(uuid.uuid4()),
+        "endpoint_name": req.endpoint_name,
+        "endpoint_url": req.endpoint_url or aicte_connector.AICTE_BASE_URL,
+        "category": req.category,
+        "active": req.active,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.aicte_api_sources.insert_one({**row})
+    return row
+
+
+@api_router.patch("/admin/aicte/sources/{endpoint_id}")
+async def admin_aicte_patch_source(endpoint_id: str, req: AicteEndpointPatch):
+    patch = {k: v for k, v in req.dict().items() if v is not None}
+    if not patch:
+        raise HTTPException(400, "Nothing to update")
+    res = await db.aicte_api_sources.update_one({"id": endpoint_id}, {"$set": patch})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Endpoint not found")
+    return await db.aicte_api_sources.find_one({"id": endpoint_id}, {"_id": 0})
+
+
+@api_router.post("/admin/aicte/sync")
+async def admin_aicte_sync(req: AicteSyncRequest):
+    src = await db.data_sources.find_one({"source_type": "AICTE"}, {"_id": 0})
+    if not src:
+        await ds.seed_sources(db)
+        src = await db.data_sources.find_one({"source_type": "AICTE"}, {"_id": 0})
+    params = {"academic_year": req.academic_year or aicte_connector.DEFAULT_YEAR, "run_type": req.run_type}
+    run_id = await ds.create_run(db, src, run_type=req.run_type, params=params)
+    _spawn(ds.run_source_sync(db, src, run_id, params))
+    return {"run_id": run_id, "status": "Queued", "academic_year": params["academic_year"]}
+
+
+@api_router.get("/admin/aicte/records")
+async def admin_aicte_records(academic_year: Optional[str] = None, category: Optional[str] = None,
+                              q: Optional[str] = None, state: Optional[str] = None,
+                              limit: int = Query(100, ge=1, le=MAX_PAGE_SIZE), offset: int = Query(0, ge=0)):
+    query: dict = {}
+    if academic_year:
+        query["academic_year"] = academic_year
+    if category:
+        query["source_category"] = category
+    if state:
+        query["state"] = state
+    if q:
+        query["collegename"] = {"$regex": re.escape(q), "$options": "i"}
+    total = await db.aicte_records.count_documents(query)
+    rows = await db.aicte_records.find(query, {"_id": 0}).sort("collegename", 1).skip(offset).to_list(limit)
+    return {"records": rows, "total": total}
+
+
+@api_router.get("/admin/aicte/payloads")
+async def admin_aicte_payloads(academic_year: Optional[str] = None,
+                               limit: int = Query(50, ge=1, le=MAX_PAGE_SIZE)):
+    query: dict = {}
+    if academic_year:
+        query["academic_year"] = academic_year
+    # Exclude the heavy payload_json blob from the list view.
+    rows = await db.aicte_raw_payloads.find(
+        query, {"_id": 0, "payload_json": 0}
+    ).sort("fetched_at", -1).to_list(limit)
+    return {"payloads": rows}
+
+
+@api_router.get("/admin/aicte/payloads/{payload_id}")
+async def admin_aicte_payload(payload_id: str):
+    row = await db.aicte_raw_payloads.find_one({"id": payload_id}, {"_id": 0})
+    if not row:
+        raise HTTPException(404, "Raw payload not found")
+    return row
+
+
+@api_router.get("/admin/aicte/years")
+async def admin_aicte_years():
+    years = sorted(await db.aicte_records.distinct("academic_year"))
+    return {"years": years}
+# ----------------- /Data Sources + AICTE -----------------
+
+
 app.include_router(api_router)
 
 
@@ -776,7 +953,7 @@ app.add_middleware(HoneypotMiddleware)
 
 JOB_COLLECTIONS = [
     "nirf_jobs", "nirf_extract_jobs", "nirf_normalize_jobs",
-    "nirf_intelligence_jobs", "nirf_refresh_jobs",
+    "nirf_intelligence_jobs", "nirf_refresh_jobs", "sync_runs",
 ]
 
 
@@ -815,6 +992,14 @@ async def _ensure_indexes():
     # email (Fernet ciphertext is random, so a unique index on it is meaningless).
     # sparse=True so any legacy row without the field does not break index creation.
     await db.users.create_index([("email_bidx", 1)], unique=True, sparse=True)
+    # Data Sources Management Layer + AICTE connector indexes (additive).
+    await db.data_sources.create_index([("source_type", 1)], unique=True)
+    await db.sync_runs.create_index([("source_id", 1), ("created_at", -1)])
+    await db.sync_runs.create_index([("source_type", 1), ("created_at", -1)])
+    await db.aicte_api_sources.create_index([("category", 1)])
+    await db.aicte_raw_payloads.create_index([("academic_year", 1), ("fetched_at", -1)])
+    await db.aicte_records.create_index([("academic_year", 1), ("source_category", 1)])
+    await db.aicte_records.create_index([("collegename", 1)])
     for coll in JOB_COLLECTIONS:
         await db[coll].create_index([("created_at", -1)])
         await db[coll].create_index([("id", 1)])
@@ -823,6 +1008,8 @@ async def _ensure_indexes():
 @app.on_event("startup")
 async def on_startup():
     await seed_admin(db)
+    await ds.seed_sources(db)
+    await aicte_connector.seed_endpoints(db)
     await _ensure_indexes()
     await _reconcile_orphaned_jobs()
     llm_status = await ollama_health()

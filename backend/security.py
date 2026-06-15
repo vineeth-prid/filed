@@ -75,8 +75,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if self._is_production:
             response.headers["Strict-Transport-Security"] = _HSTS
         # Remove headers that reveal implementation details.
-        response.headers.pop("server", None)
-        response.headers.pop("x-powered-by", None)
+        if "server" in response.headers:
+            del response.headers["server"]
+        if "x-powered-by" in response.headers:
+            del response.headers["x-powered-by"]
         return response
 
 

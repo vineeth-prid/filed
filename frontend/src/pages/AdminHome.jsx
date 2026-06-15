@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import axios from "axios";
 import {
   Database, FileSearch, SlidersHorizontal, Brain, RotateCw,
-  ArrowRight, Layers, Activity,
+  ArrowRight, Layers, Activity, Plug, Server,
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -81,6 +81,54 @@ export default function AdminHome() {
           </div>
         )}
 
+        {/* Data Sources Management Layer (multi-source platform) */}
+        <div className="mb-3 flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-slate2 font-semibold font-mono">
+          <Server className="w-3.5 h-3.5 text-emerald2" /> Data Sources Platform
+        </div>
+        <div className="grid md:grid-cols-2 gap-5 mb-10">
+          <Link to="/admin/sources" data-testid="module-sources"
+            className="group border border-border bg-white p-6 hover:border-navy transition-colors flex flex-col">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-navy flex items-center justify-center group-hover:bg-emerald2 transition-colors">
+                  <Layers className="w-5 h-5 text-white group-hover:text-navy transition-colors" strokeWidth={1.6} />
+                </div>
+                <div>
+                  <div className="font-mono text-[10px] text-slate2 uppercase tracking-wider">Platform</div>
+                  <div className="font-heading font-bold text-lg text-navy tracking-tight">Data Sources</div>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-slate2 group-hover:text-navy group-hover:translate-x-1 transition-all" />
+            </div>
+            <p className="mt-4 text-sm text-slate2 leading-relaxed">
+              Manage every connector (NIRF, AICTE, future NAAC / TNEA / AISHE) from one dashboard — sync, history, logs, version & error tracking, and cross-source monitoring.
+            </p>
+          </Link>
+
+          <Link to="/admin/aicte" data-testid="module-aicte"
+            className="group border border-border bg-white p-6 hover:border-navy transition-colors flex flex-col">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-navy flex items-center justify-center group-hover:bg-emerald2 transition-colors">
+                  <Plug className="w-5 h-5 text-white group-hover:text-navy transition-colors" strokeWidth={1.6} />
+                </div>
+                <div>
+                  <div className="font-mono text-[10px] text-slate2 uppercase tracking-wider">Connector · JSON API</div>
+                  <div className="font-heading font-bold text-lg text-navy tracking-tight">AICTE</div>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-slate2 group-hover:text-navy group-hover:translate-x-1 transition-all" />
+            </div>
+            <p className="mt-4 text-sm text-slate2 leading-relaxed">
+              Acquire approved-intake disclosures (NRI / PIO / FN / CIWG) from AICTE APIs — fetch JSON, store immutable raw payloads, normalize & validate into structured records.
+            </p>
+          </Link>
+        </div>
+
+        {/* NIRF pipeline (existing) */}
+        <div className="mb-3 flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-slate2 font-semibold font-mono">
+          <Database className="w-3.5 h-3.5 text-emerald2" /> NIRF Pipeline
+        </div>
         {/* Module cards */}
         <div className="grid md:grid-cols-2 gap-5">
           {MODULES.map((m) => (
