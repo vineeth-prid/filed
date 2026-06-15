@@ -101,3 +101,14 @@ Build a high-fidelity product prototype for **Filed**, an Education Due Diligenc
 - **P2**: Real NIRF/AICTE data ingestion pipeline
 - **P3**: Early access email capture + admin dashboard
 - **P3**: Mobile-first responsive refinements for scatter plot
+
+## Data Sources Management Layer + AICTE Connector (Jul 2025)
+- **Goal**: a source-independent data-acquisition platform layered ON TOP of the untouched NIRF engine (NIRF tables/workflows/UI unchanged). NOT a KPI/analytics/ranking engine.
+- **Data Sources layer** (`data_sources_service.py`): collections `data_sources` (registered sources) + `sync_runs` (every sync execution: status/history/logs/errors/version). Connector REGISTRY (`CONNECTORS` dict) — adding NAAC/TNEA/AISHE later needs only source registration + a connector entry, no refactor. NIRF connector is READ-ONLY (snapshots counts; never mutates nirf_* collections). Seeds NIRF + AICTE on startup.
+  - APIs: GET `/api/admin/sources`(+/{id}), POST `/sources/{id}/sync`, GET `/sources/{id}/runs`, GET `/sync-runs`(+/{id}), GET `/monitoring`.
+  - UI `/admin/sources` (`AdminSources.jsx`): Sources table (status/connector/records/years/last sync + Sync & History buttons), live run log panel, History modal, Monitoring tab (by_source + recent runs).
+- **AICTE connector** (`aicte_connector.py`): JSON API source. Collections `aicte_api_sources` (endpoints NRI/PIO/FN/CIWG, dynamic), `aicte_raw_payloads` (immutable raw JSON, versioned), `aicte_records` (normalized). Flow: fetch JSON → store raw → normalize (case-insensitive multi-candidate field mapper) → validate → publish. Live httpx fetch first; AICTE upstream is geo/IP-blocked from this infra so it falls back to a clearly-labelled SIMULATED payload (data_origin=simulated) — switches to live automatically when reachable. Re-sync replaces normalized records per (year,category); raw payloads accumulate as immutable history.
+  - APIs: GET `/api/admin/aicte/overview`, `/sources`(GET+POST), PATCH `/sources/{id}`, POST `/aicte/sync`, GET `/records`, `/payloads`(+/{id}), `/years`.
+  - UI `/admin/aicte` (`AdminAICTE.jsx`): Overview, Endpoints (toggle active), Records (filters/search), Raw Payloads (view JSON), Sync History; year picker + Manual Sync with live progress + simulated-origin banner.
+- Admin hub (`AdminHome.jsx`) gains a "Data Sources Platform" section (Data Sources + AICTE cards); NIRF cards untouched.
+- Verified: backend 12/12 PASSED (incl. NIRF read-only regression + idempotency). Testing agent also fixed a pre-existing `security.py` MutableHeaders.pop bug. Frontend not yet tested (awaiting user approval).
