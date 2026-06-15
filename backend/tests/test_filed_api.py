@@ -15,7 +15,7 @@ import re
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://dossier-check-1.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://data-intake-hub-4.preview.emergentagent.com").rstrip("/")
 
 # Forbidden accusatory terms (case-insensitive whole-word match)
 FORBIDDEN_TERMS = ["fake", "misleading", "scam", "inflated"]
