@@ -1,662 +1,731 @@
+#!/usr/bin/env python3
 """
-Backend API Testing for NAAC Connector Framework
-Tests the NAAC connector integration with the Data Sources Management Layer.
+Backend API Testing for Filed Platform - Support/Admissions Assistant + Leads CRM
+Tests the NEW assistant and leads management features.
 """
 import requests
-import time
 import json
+import time
+import sys
 
-# Configuration
-BACKEND_URL = "https://data-intake-hub-4.preview.emergentagent.com/api"
+# Backend URL from frontend/.env
+BASE_URL = "https://data-intake-hub-4.preview.emergentagent.com/api"
+
+# Browser User-Agent header (CRITICAL: anti-bot middleware blocks curl/tool UAs)
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Content-Type": "application/json",
+}
+
+# Admin credentials from test_credentials.md
 ADMIN_EMAIL = "vini.roks@gmail.com"
 ADMIN_PASSWORD = "Admin!123@"
 
-# IMPORTANT: Browser-like User-Agent required to bypass anti-bot middleware
-HEADERS = {
-    "Content-Type": "application/json",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-}
+# Test results tracking
+test_results = []
+lead_id = None
+access_token = None
 
-def log_test(test_name, status, details=""):
-    """Log test results"""
-    symbol = "✅" if status == "PASS" else "❌"
-    print(f"\n{symbol} {test_name}")
+
+def log_test(test_name, passed, details=""):
+    """Log test result"""
+    status = "✅ PASS" if passed else "❌ FAIL"
+    result = f"{status} - {test_name}"
     if details:
-        print(f"   {details}")
+        result += f"\n    Details: {details}"
+    print(result)
+    test_results.append({"test": test_name, "passed": passed, "details": details})
 
-def authenticate():
-    """Authenticate and get access token"""
-    print("\n" + "="*80)
-    print("AUTHENTICATING...")
-    print("="*80)
-    
-    response = requests.post(
-        f"{BACKEND_URL}/auth/login",
-        json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
-        headers=HEADERS
-    )
-    
-    if response.status_code == 200:
-        token = response.json().get("access_token")
-        log_test("Authentication", "PASS", f"Token obtained")
-        return token
-    else:
-        log_test("Authentication", "FAIL", f"Status: {response.status_code}, Response: {response.text}")
-        return None
 
-def test_sources_list(token):
-    """Test 1: GET /api/admin/sources - must include NAAC"""
-    print("\n" + "="*80)
-    print("TEST 1: Data Sources List (must include NAAC)")
-    print("="*80)
-    
-    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
-    response = requests.get(f"{BACKEND_URL}/admin/sources", headers=headers)
-    
-    if response.status_code != 200:
-        log_test("GET /api/admin/sources", "FAIL", f"Status: {response.status_code}")
-        return False
-    
-    data = response.json()
-    sources = data.get("sources", [])
-    
-    # Check for all three sources
-    source_types = [s.get("source_type") for s in sources]
-    
-    if "NIRF" not in source_types:
-        log_test("GET /api/admin/sources", "FAIL", "NIRF source missing")
-        return False
-    
-    if "AICTE" not in source_types:
-        log_test("GET /api/admin/sources", "FAIL", "AICTE source missing")
-        return False
-    
-    if "NAAC" not in source_types:
-        log_test("GET /api/admin/sources", "FAIL", "NAAC source missing")
-        return False
-    
-    # Find NAAC source and validate fields
-    naac_source = next((s for s in sources if s.get("source_type") == "NAAC"), None)
-    
-    if not naac_source:
-        log_test("GET /api/admin/sources", "FAIL", "NAAC source not found")
-        return False
-    
-    # Validate NAAC source fields
-    required_fields = ["id", "source_name", "source_type", "connector_type", "status", "records", "years_available"]
-    missing_fields = [f for f in required_fields if f not in naac_source]
-    
-    if missing_fields:
-        log_test("GET /api/admin/sources", "FAIL", f"NAAC source missing fields: {missing_fields}")
-        return False
-    
-    if naac_source.get("connector_type") != "hybrid_web":
-        log_test("GET /api/admin/sources", "FAIL", f"NAAC connector_type is '{naac_source.get('connector_type')}', expected 'hybrid_web'")
-        return False
-    
-    log_test("GET /api/admin/sources", "PASS", 
-             f"Found 3 sources: NIRF, AICTE, NAAC. NAAC connector_type=hybrid_web, status={naac_source.get('status')}")
-    return True
-
-def test_naac_overview(token):
-    """Test 2: GET /api/admin/naac/overview"""
-    print("\n" + "="*80)
-    print("TEST 2: NAAC Overview")
-    print("="*80)
-    
-    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
-    response = requests.get(f"{BACKEND_URL}/admin/naac/overview", headers=headers)
-    
-    if response.status_code != 200:
-        log_test("GET /api/admin/naac/overview", "FAIL", f"Status: {response.status_code}")
-        return False
-    
-    data = response.json()
-    
-    # Check required keys
-    required_keys = [
-        "institutions", "assessments", "document_links", "pdfs_downloaded",
-        "extraction_success", "extraction_failed", "raw_html", "raw_pdf",
-        "states", "last_run", "monitoring"
-    ]
-    
-    missing_keys = [k for k in required_keys if k not in data]
-    
-    if missing_keys:
-        log_test("GET /api/admin/naac/overview", "FAIL", f"Missing keys: {missing_keys}")
-        return False
-    
-    # Check monitoring object structure
-    monitoring = data.get("monitoring", {})
-    monitoring_keys = [
-        "institutions_synced", "assessments_imported", "pdfs_downloaded",
-        "extraction_success", "failed_downloads", "failed_parsing"
-    ]
-    
-    missing_monitoring = [k for k in monitoring_keys if k not in monitoring]
-    
-    if missing_monitoring:
-        log_test("GET /api/admin/naac/overview", "FAIL", f"Missing monitoring keys: {missing_monitoring}")
-        return False
-    
-    log_test("GET /api/admin/naac/overview", "PASS", 
-             f"institutions={data['institutions']}, assessments={data['assessments']}, states={len(data['states'])}")
-    return True
-
-def test_naac_sync_graceful_failure(token):
-    """Test 3: POST /api/admin/naac/sync - expect graceful failure due to geo-block"""
-    print("\n" + "="*80)
-    print("TEST 3: NAAC Sync (expect graceful failure - geo-blocked)")
-    print("="*80)
-    
-    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
-    
-    # Trigger sync
-    sync_payload = {
-        "mode": "manual",
-        "limit": 3,
-        "download_pdfs": False,
-        "extract_pdfs": False
-    }
-    
-    response = requests.post(
-        f"{BACKEND_URL}/admin/naac/sync",
-        json=sync_payload,
-        headers=headers
-    )
-    
-    if response.status_code != 200:
-        log_test("POST /api/admin/naac/sync", "FAIL", f"Status: {response.status_code}")
-        return None
-    
-    data = response.json()
-    run_id = data.get("run_id")
-    
-    if not run_id:
-        log_test("POST /api/admin/naac/sync", "FAIL", "No run_id returned")
-        return None
-    
-    log_test("POST /api/admin/naac/sync", "PASS", f"run_id={run_id}, status={data.get('status')}")
-    
-    # Poll for completion
-    print("\n   Polling sync run status...")
-    max_polls = 20
-    poll_interval = 2
-    
-    for i in range(max_polls):
-        time.sleep(poll_interval)
-        
-        poll_response = requests.get(
-            f"{BACKEND_URL}/admin/sync-runs/{run_id}",
-            headers=headers
+def get_admin_token():
+    """Get JWT token for admin endpoints"""
+    global access_token
+    print("\n=== Getting Admin JWT Token ===")
+    try:
+        response = requests.post(
+            f"{BASE_URL}/auth/login",
+            headers=HEADERS,
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+            timeout=30
         )
-        
-        if poll_response.status_code != 200:
-            log_test("GET /api/admin/sync-runs/{run_id}", "FAIL", f"Status: {poll_response.status_code}")
+        if response.status_code == 200:
+            data = response.json()
+            access_token = data.get("access_token")
+            log_test("Admin Login", True, f"Token obtained: {access_token[:20]}...")
+            return access_token
+        else:
+            log_test("Admin Login", False, f"Status {response.status_code}: {response.text}")
             return None
-        
-        run_data = poll_response.json()
-        status = run_data.get("status")
-        
-        print(f"   Poll {i+1}/{max_polls}: status={status}")
-        
-        if status in ["Completed", "Failed", "Interrupted"]:
-            # Terminal state reached
-            if status == "Failed":
-                # This is EXPECTED due to geo-block
-                errors = run_data.get("errors", [])
-                source_type = run_data.get("source_type")
-                
-                if source_type != "NAAC":
-                    log_test("NAAC Sync Graceful Failure", "FAIL", f"source_type is '{source_type}', expected 'NAAC'")
-                    return None
-                
-                if not errors:
-                    log_test("NAAC Sync Graceful Failure", "FAIL", "status=Failed but errors list is empty")
-                    return None
-                
-                log_test("NAAC Sync Graceful Failure", "PASS", 
-                         f"status=Failed (EXPECTED - geo-blocked), source_type=NAAC, errors captured: {len(errors)} error(s)")
-                return run_id
-            
-            elif status == "Completed":
-                # Unexpected - should fail due to geo-block
-                log_test("NAAC Sync Graceful Failure", "FAIL", 
-                         "status=Completed (unexpected - should fail due to geo-block)")
-                return None
-            
-            else:
-                log_test("NAAC Sync Graceful Failure", "FAIL", f"Unexpected terminal status: {status}")
-                return None
-    
-    log_test("NAAC Sync Graceful Failure", "FAIL", "Sync did not reach terminal state within timeout")
-    return None
+    except Exception as e:
+        log_test("Admin Login", False, f"Exception: {str(e)}")
+        return None
 
-def test_naac_empty_endpoints(token):
-    """Test 4: GET /api/admin/naac/* endpoints - should return valid empty structures"""
-    print("\n" + "="*80)
-    print("TEST 4: NAAC Empty Data Endpoints")
-    print("="*80)
-    
-    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
-    all_pass = True
-    
-    # Test institutions
-    response = requests.get(f"{BACKEND_URL}/admin/naac/institutions", headers=headers)
-    if response.status_code != 200:
-        log_test("GET /api/admin/naac/institutions", "FAIL", f"Status: {response.status_code}")
-        all_pass = False
-    else:
-        data = response.json()
-        if "institutions" not in data or "total" not in data:
-            log_test("GET /api/admin/naac/institutions", "FAIL", "Missing 'institutions' or 'total' key")
-            all_pass = False
-        else:
-            log_test("GET /api/admin/naac/institutions", "PASS", f"total={data['total']}")
-    
-    # Test institutions with query
-    response = requests.get(f"{BACKEND_URL}/admin/naac/institutions?q=test", headers=headers)
-    if response.status_code != 200:
-        log_test("GET /api/admin/naac/institutions?q=test", "FAIL", f"Status: {response.status_code}")
-        all_pass = False
-    else:
-        log_test("GET /api/admin/naac/institutions?q=test", "PASS", "Query parameter works")
-    
-    # Test assessments
-    response = requests.get(f"{BACKEND_URL}/admin/naac/assessments", headers=headers)
-    if response.status_code != 200:
-        log_test("GET /api/admin/naac/assessments", "FAIL", f"Status: {response.status_code}")
-        all_pass = False
-    else:
-        data = response.json()
-        if "assessments" not in data or "total" not in data:
-            log_test("GET /api/admin/naac/assessments", "FAIL", "Missing 'assessments' or 'total' key")
-            all_pass = False
-        else:
-            log_test("GET /api/admin/naac/assessments", "PASS", f"total={data['total']}")
-    
-    # Test documents
-    response = requests.get(f"{BACKEND_URL}/admin/naac/documents", headers=headers)
-    if response.status_code != 200:
-        log_test("GET /api/admin/naac/documents", "FAIL", f"Status: {response.status_code}")
-        all_pass = False
-    else:
-        data = response.json()
-        if "documents" not in data or "total" not in data:
-            log_test("GET /api/admin/naac/documents", "FAIL", "Missing 'documents' or 'total' key")
-            all_pass = False
-        else:
-            log_test("GET /api/admin/naac/documents", "PASS", f"total={data['total']}")
-    
-    # Test document-links
-    response = requests.get(f"{BACKEND_URL}/admin/naac/document-links", headers=headers)
-    if response.status_code != 200:
-        log_test("GET /api/admin/naac/document-links", "FAIL", f"Status: {response.status_code}")
-        all_pass = False
-    else:
-        data = response.json()
-        if "document_links" not in data:
-            log_test("GET /api/admin/naac/document-links", "FAIL", "Missing 'document_links' key")
-            all_pass = False
-        else:
-            log_test("GET /api/admin/naac/document-links", "PASS", f"links={len(data['document_links'])}")
-    
-    return all_pass
 
-def test_naac_single_institution_sync(token):
-    """Test 5: Single-institution sync - also fails gracefully"""
-    print("\n" + "="*80)
-    print("TEST 5: NAAC Single-Institution Sync (expect graceful failure)")
-    print("="*80)
-    
-    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
-    
-    sync_payload = {
-        "mode": "single",
-        "hei_assessment_id": 16164,
-        "status": 5,
-        "download_pdfs": False,
-        "extract_pdfs": False
-    }
-    
-    response = requests.post(
-        f"{BACKEND_URL}/admin/naac/sync",
-        json=sync_payload,
-        headers=headers
-    )
-    
-    if response.status_code != 200:
-        log_test("POST /api/admin/naac/sync (single)", "FAIL", f"Status: {response.status_code}")
-        return False
-    
-    data = response.json()
-    run_id = data.get("run_id")
-    
-    if not run_id:
-        log_test("POST /api/admin/naac/sync (single)", "FAIL", "No run_id returned")
-        return False
-    
-    log_test("POST /api/admin/naac/sync (single)", "PASS", f"run_id={run_id}")
-    
-    # Poll for completion
-    print("\n   Polling single-institution sync...")
-    max_polls = 20
-    poll_interval = 2
-    
-    for i in range(max_polls):
-        time.sleep(poll_interval)
-        
-        poll_response = requests.get(
-            f"{BACKEND_URL}/admin/sync-runs/{run_id}",
-            headers=headers
+def test_1_public_chat():
+    """Test 1: PUBLIC chat (no auth) - first message"""
+    print("\n=== Test 1: PUBLIC Chat (No Auth) ===")
+    try:
+        response = requests.post(
+            f"{BASE_URL}/assistant/chat",
+            headers=HEADERS,
+            json={
+                "session_id": "test-sess-1",
+                "message": "I need admission help for engineering"
+            },
+            timeout=30
         )
         
-        if poll_response.status_code != 200:
-            log_test("Single-institution sync poll", "FAIL", f"Status: {poll_response.status_code}")
+        if response.status_code != 200:
+            log_test("Test 1: PUBLIC chat", False, f"Expected 200, got {response.status_code}: {response.text}")
             return False
         
-        run_data = poll_response.json()
-        status = run_data.get("status")
+        data = response.json()
         
-        print(f"   Poll {i+1}/{max_polls}: status={status}")
+        # Validate response structure
+        if "session_id" not in data:
+            log_test("Test 1: PUBLIC chat", False, "Missing 'session_id' in response")
+            return False
         
-        if status in ["Completed", "Failed", "Interrupted"]:
-            if status == "Failed":
-                log_test("Single-institution Sync Graceful Failure", "PASS", 
-                         "status=Failed (EXPECTED - geo-blocked)")
-                return True
-            else:
-                log_test("Single-institution Sync Graceful Failure", "FAIL", 
-                         f"Unexpected status: {status}")
-                return False
-    
-    log_test("Single-institution Sync Graceful Failure", "FAIL", "Did not reach terminal state")
-    return False
-
-def test_naac_schedule(token):
-    """Test 6: Schedule configuration"""
-    print("\n" + "="*80)
-    print("TEST 6: NAAC Schedule Configuration")
-    print("="*80)
-    
-    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
-    
-    # GET default schedule
-    response = requests.get(f"{BACKEND_URL}/admin/naac/schedule", headers=headers)
-    
-    if response.status_code != 200:
-        log_test("GET /api/admin/naac/schedule", "FAIL", f"Status: {response.status_code}")
-        return False
-    
-    data = response.json()
-    
-    # Check defaults
-    if "enabled" not in data or "interval_hours" not in data:
-        log_test("GET /api/admin/naac/schedule", "FAIL", "Missing 'enabled' or 'interval_hours'")
-        return False
-    
-    log_test("GET /api/admin/naac/schedule", "PASS", 
-             f"enabled={data.get('enabled')}, interval_hours={data.get('interval_hours')}")
-    
-    # PUT to enable schedule
-    update_payload = {
-        "enabled": True,
-        "interval_hours": 12,
-        "params": {
-            "mode": "manual",
-            "limit": 5
-        }
-    }
-    
-    response = requests.put(
-        f"{BACKEND_URL}/admin/naac/schedule",
-        json=update_payload,
-        headers=headers
-    )
-    
-    if response.status_code != 200:
-        log_test("PUT /api/admin/naac/schedule (enable)", "FAIL", f"Status: {response.status_code}")
-        return False
-    
-    data = response.json()
-    
-    if data.get("enabled") != True or data.get("interval_hours") != 12:
-        log_test("PUT /api/admin/naac/schedule (enable)", "FAIL", 
-                 f"Values not persisted: enabled={data.get('enabled')}, interval_hours={data.get('interval_hours')}")
-        return False
-    
-    log_test("PUT /api/admin/naac/schedule (enable)", "PASS", "enabled=True, interval_hours=12")
-    
-    # GET again to confirm persistence
-    response = requests.get(f"{BACKEND_URL}/admin/naac/schedule", headers=headers)
-    
-    if response.status_code != 200:
-        log_test("GET /api/admin/naac/schedule (verify)", "FAIL", f"Status: {response.status_code}")
-        return False
-    
-    data = response.json()
-    
-    if data.get("enabled") != True or data.get("interval_hours") != 12:
-        log_test("GET /api/admin/naac/schedule (verify)", "FAIL", "Values not persisted")
-        return False
-    
-    log_test("GET /api/admin/naac/schedule (verify)", "PASS", "Values persisted correctly")
-    
-    # PUT to disable schedule (important: leave disabled)
-    disable_payload = {
-        "enabled": False,
-        "interval_hours": 24,
-        "params": {}
-    }
-    
-    response = requests.put(
-        f"{BACKEND_URL}/admin/naac/schedule",
-        json=disable_payload,
-        headers=headers
-    )
-    
-    if response.status_code != 200:
-        log_test("PUT /api/admin/naac/schedule (disable)", "FAIL", f"Status: {response.status_code}")
-        return False
-    
-    data = response.json()
-    
-    if data.get("enabled") != False:
-        log_test("PUT /api/admin/naac/schedule (disable)", "FAIL", "Schedule not disabled")
-        return False
-    
-    log_test("PUT /api/admin/naac/schedule (disable)", "PASS", "Schedule disabled successfully")
-    
-    return True
-
-def test_monitoring_includes_naac(token):
-    """Test 7: GET /api/admin/monitoring - should include NAAC"""
-    print("\n" + "="*80)
-    print("TEST 7: Monitoring includes NAAC")
-    print("="*80)
-    
-    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
-    response = requests.get(f"{BACKEND_URL}/admin/monitoring", headers=headers)
-    
-    if response.status_code != 200:
-        log_test("GET /api/admin/monitoring", "FAIL", f"Status: {response.status_code}")
-        return False
-    
-    data = response.json()
-    by_source = data.get("by_source", [])
-    
-    naac_entry = next((s for s in by_source if s.get("source_type") == "NAAC"), None)
-    
-    if not naac_entry:
-        log_test("GET /api/admin/monitoring", "FAIL", "NAAC entry not found in by_source")
-        return False
-    
-    log_test("GET /api/admin/monitoring", "PASS", 
-             f"NAAC entry found: status={naac_entry.get('status')}, runs={naac_entry.get('runs')}")
-    return True
-
-def test_regression_nirf_aicte(token):
-    """Test 8: REGRESSION - NIRF and AICTE still work"""
-    print("\n" + "="*80)
-    print("TEST 8: REGRESSION - NIRF and AICTE unaffected")
-    print("="*80)
-    
-    headers = {**HEADERS, "Authorization": f"Bearer {token}"}
-    all_pass = True
-    
-    # Test NIRF overview
-    response = requests.get(f"{BACKEND_URL}/admin/nirf/overview", headers=headers)
-    
-    if response.status_code != 200:
-        log_test("GET /api/admin/nirf/overview", "FAIL", f"Status: {response.status_code}")
-        all_pass = False
-    else:
-        log_test("GET /api/admin/nirf/overview", "PASS", "NIRF overview still works")
-    
-    # Test AICTE sync
-    sync_payload = {
-        "academic_year": "2025-2026",
-        "run_type": "manual"
-    }
-    
-    response = requests.post(
-        f"{BACKEND_URL}/admin/aicte/sync",
-        json=sync_payload,
-        headers=headers
-    )
-    
-    if response.status_code != 200:
-        log_test("POST /api/admin/aicte/sync", "FAIL", f"Status: {response.status_code}")
-        all_pass = False
-        return all_pass
-    
-    data = response.json()
-    run_id = data.get("run_id")
-    
-    if not run_id:
-        log_test("POST /api/admin/aicte/sync", "FAIL", "No run_id returned")
-        all_pass = False
-        return all_pass
-    
-    log_test("POST /api/admin/aicte/sync", "PASS", f"run_id={run_id}")
-    
-    # Poll AICTE sync
-    print("\n   Polling AICTE sync...")
-    max_polls = 15
-    poll_interval = 2
-    
-    for i in range(max_polls):
-        time.sleep(poll_interval)
+        if data["session_id"] != "test-sess-1":
+            log_test("Test 1: PUBLIC chat", False, f"session_id mismatch: expected 'test-sess-1', got '{data['session_id']}'")
+            return False
         
-        poll_response = requests.get(
-            f"{BACKEND_URL}/admin/sync-runs/{run_id}",
-            headers=headers
+        if "reply" not in data or not data["reply"]:
+            log_test("Test 1: PUBLIC chat", False, "Missing or empty 'reply' in response")
+            return False
+        
+        if "suggest_lead" not in data:
+            log_test("Test 1: PUBLIC chat", False, "Missing 'suggest_lead' in response")
+            return False
+        
+        # Check if it's a fallback (Ollama down) - this is EXPECTED
+        llm_ok = data.get("llm_ok", True)
+        if not llm_ok:
+            details = f"Fallback reply (Ollama down, EXPECTED): '{data['reply'][:100]}...', suggest_lead={data['suggest_lead']}"
+        else:
+            details = f"LLM reply: '{data['reply'][:100]}...', suggest_lead={data['suggest_lead']}"
+        
+        log_test("Test 1: PUBLIC chat", True, details)
+        return True
+        
+    except Exception as e:
+        log_test("Test 1: PUBLIC chat", False, f"Exception: {str(e)}")
+        return False
+
+
+def test_2_multi_turn():
+    """Test 2: Multi-turn persistence - same session"""
+    print("\n=== Test 2: Multi-turn Persistence ===")
+    try:
+        response = requests.post(
+            f"{BASE_URL}/assistant/chat",
+            headers=HEADERS,
+            json={
+                "session_id": "test-sess-1",
+                "message": "What about fewer fees options?"
+            },
+            timeout=30
         )
         
-        if poll_response.status_code != 200:
-            log_test("AICTE sync poll", "FAIL", f"Status: {poll_response.status_code}")
-            all_pass = False
-            break
+        if response.status_code != 200:
+            log_test("Test 2: Multi-turn persistence", False, f"Expected 200, got {response.status_code}: {response.text}")
+            return False
         
-        run_data = poll_response.json()
-        status = run_data.get("status")
+        data = response.json()
         
-        print(f"   Poll {i+1}/{max_polls}: status={status}")
+        if data.get("session_id") != "test-sess-1":
+            log_test("Test 2: Multi-turn persistence", False, f"session_id mismatch")
+            return False
         
-        if status == "Completed":
-            data_origin = run_data.get("data_origin")
-            records = run_data.get("records_processed", 0)
-            
-            if data_origin != "simulated":
-                log_test("AICTE Sync Regression", "FAIL", 
-                         f"data_origin is '{data_origin}', expected 'simulated'")
-                all_pass = False
-            elif records <= 0:
-                log_test("AICTE Sync Regression", "FAIL", 
-                         f"records_processed={records}, expected > 0")
-                all_pass = False
-            else:
-                log_test("AICTE Sync Regression", "PASS", 
-                         f"status=Completed, data_origin=simulated, records={records}")
-            break
+        if not data.get("reply"):
+            log_test("Test 2: Multi-turn persistence", False, "Empty reply")
+            return False
         
-        elif status in ["Failed", "Interrupted"]:
-            log_test("AICTE Sync Regression", "FAIL", f"Unexpected status: {status}")
-            all_pass = False
-            break
-    else:
-        log_test("AICTE Sync Regression", "FAIL", "Did not complete within timeout")
-        all_pass = False
-    
-    return all_pass
+        log_test("Test 2: Multi-turn persistence", True, f"Reply: '{data['reply'][:80]}...'")
+        return True
+        
+    except Exception as e:
+        log_test("Test 2: Multi-turn persistence", False, f"Exception: {str(e)}")
+        return False
 
-def test_auth_gate(token):
-    """Test 9: Auth gate - requests without token should return 401"""
-    print("\n" + "="*80)
-    print("TEST 9: Auth Gate (401 without token)")
-    print("="*80)
+
+def test_3_lead_capture():
+    """Test 3: PUBLIC lead capture (no auth) + validation"""
+    global lead_id
+    print("\n=== Test 3: PUBLIC Lead Capture + Validation ===")
     
-    # Request without Authorization header
-    response = requests.get(
-        f"{BACKEND_URL}/admin/naac/overview",
-        headers=HEADERS  # No Authorization header
-    )
-    
-    if response.status_code != 401:
-        log_test("Auth Gate", "FAIL", f"Expected 401, got {response.status_code}")
+    # 3a: Valid lead submission
+    print("\n3a: Valid lead submission")
+    try:
+        response = requests.post(
+            f"{BASE_URL}/assistant/lead",
+            headers=HEADERS,
+            json={
+                "session_id": "test-sess-1",
+                "name": "Ravi Kumar",
+                "email": "ravi@example.com",
+                "phone": "9876543210",
+                "interest": "B.Tech CSE",
+                "message": "please call me"
+            },
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            log_test("Test 3a: Valid lead", False, f"Expected 200, got {response.status_code}: {response.text}")
+            return False
+        
+        data = response.json()
+        
+        if not data.get("ok"):
+            log_test("Test 3a: Valid lead", False, f"ok=false: {data.get('error')}")
+            return False
+        
+        if "lead_id" not in data:
+            log_test("Test 3a: Valid lead", False, "Missing 'lead_id' in response")
+            return False
+        
+        lead_id = data["lead_id"]
+        log_test("Test 3a: Valid lead", True, f"lead_id={lead_id}")
+        
+    except Exception as e:
+        log_test("Test 3a: Valid lead", False, f"Exception: {str(e)}")
         return False
     
-    log_test("Auth Gate", "PASS", "Unauthorized request correctly rejected with 401")
-    return True
+    # 3b: Missing name (should return 400)
+    print("\n3b: Validation - missing name")
+    try:
+        response = requests.post(
+            f"{BASE_URL}/assistant/lead",
+            headers=HEADERS,
+            json={"name": "", "email": "a@b.com"},
+            timeout=30
+        )
+        
+        if response.status_code != 400:
+            log_test("Test 3b: Missing name validation", False, f"Expected 400, got {response.status_code}")
+            return False
+        
+        log_test("Test 3b: Missing name validation", True, "Correctly rejected with 400")
+        
+    except Exception as e:
+        log_test("Test 3b: Missing name validation", False, f"Exception: {str(e)}")
+        return False
+    
+    # 3c: No contact info (no email AND no phone - should return 400)
+    print("\n3c: Validation - no contact info")
+    try:
+        response = requests.post(
+            f"{BASE_URL}/assistant/lead",
+            headers=HEADERS,
+            json={"name": "NoContact"},
+            timeout=30
+        )
+        
+        if response.status_code != 400:
+            log_test("Test 3c: No contact validation", False, f"Expected 400, got {response.status_code}")
+            return False
+        
+        log_test("Test 3c: No contact validation", True, "Correctly rejected with 400")
+        
+    except Exception as e:
+        log_test("Test 3c: No contact validation", False, f"Exception: {str(e)}")
+        return False
+    
+    # 3d: Invalid email format (should return 400)
+    print("\n3d: Validation - invalid email")
+    try:
+        response = requests.post(
+            f"{BASE_URL}/assistant/lead",
+            headers=HEADERS,
+            json={"name": "BadEmail", "email": "not-an-email"},
+            timeout=30
+        )
+        
+        if response.status_code != 400:
+            log_test("Test 3d: Invalid email validation", False, f"Expected 400, got {response.status_code}")
+            return False
+        
+        log_test("Test 3d: Invalid email validation", True, "Correctly rejected with 400")
+        return True
+        
+    except Exception as e:
+        log_test("Test 3d: Invalid email validation", False, f"Exception: {str(e)}")
+        return False
 
-def main():
-    """Run all tests"""
-    print("\n" + "="*80)
-    print("NAAC CONNECTOR FRAMEWORK TESTING")
-    print("="*80)
-    print(f"Backend URL: {BACKEND_URL}")
-    print(f"Admin Email: {ADMIN_EMAIL}")
+
+def test_4_admin_leads_list():
+    """Test 4: ADMIN leads list (auth) with filters"""
+    print("\n=== Test 4: ADMIN Leads List (Auth) ===")
     
-    # Authenticate
-    token = authenticate()
-    if not token:
-        print("\n❌ AUTHENTICATION FAILED - Cannot proceed with tests")
-        return
+    if not access_token:
+        log_test("Test 4: Admin leads list", False, "No access token available")
+        return False
     
-    # Track results
-    results = {}
+    auth_headers = {**HEADERS, "Authorization": f"Bearer {access_token}"}
     
-    # Run tests
-    results["Test 1: Sources List"] = test_sources_list(token)
-    results["Test 2: NAAC Overview"] = test_naac_overview(token)
-    results["Test 3: NAAC Sync Graceful Failure"] = test_naac_sync_graceful_failure(token) is not None
-    results["Test 4: NAAC Empty Endpoints"] = test_naac_empty_endpoints(token)
-    results["Test 5: Single-Institution Sync"] = test_naac_single_institution_sync(token)
-    results["Test 6: Schedule Configuration"] = test_naac_schedule(token)
-    results["Test 7: Monitoring includes NAAC"] = test_monitoring_includes_naac(token)
-    results["Test 8: REGRESSION (NIRF + AICTE)"] = test_regression_nirf_aicte(token)
-    results["Test 9: Auth Gate"] = test_auth_gate(token)
+    # 4a: List all leads
+    print("\n4a: List all leads")
+    try:
+        response = requests.get(
+            f"{BASE_URL}/admin/leads",
+            headers=auth_headers,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            log_test("Test 4a: List all leads", False, f"Expected 200, got {response.status_code}: {response.text}")
+            return False
+        
+        data = response.json()
+        
+        if "leads" not in data or "total" not in data:
+            log_test("Test 4a: List all leads", False, "Missing 'leads' or 'total' in response")
+            return False
+        
+        if data["total"] < 1:
+            log_test("Test 4a: List all leads", False, f"Expected total>=1, got {data['total']}")
+            return False
+        
+        # Check if Ravi Kumar is present
+        ravi_found = any(lead.get("name") == "Ravi Kumar" for lead in data["leads"])
+        if not ravi_found:
+            log_test("Test 4a: List all leads", False, "Ravi Kumar not found in leads list")
+            return False
+        
+        # Check if Ravi has status "new"
+        ravi_lead = next((lead for lead in data["leads"] if lead.get("name") == "Ravi Kumar"), None)
+        if ravi_lead.get("status") != "new":
+            log_test("Test 4a: List all leads", False, f"Ravi Kumar status is '{ravi_lead.get('status')}', expected 'new'")
+            return False
+        
+        log_test("Test 4a: List all leads", True, f"total={data['total']}, Ravi Kumar found with status='new'")
+        
+    except Exception as e:
+        log_test("Test 4a: List all leads", False, f"Exception: {str(e)}")
+        return False
     
-    # Summary
+    # 4b: Filter by status=new
+    print("\n4b: Filter by status=new")
+    try:
+        response = requests.get(
+            f"{BASE_URL}/admin/leads?status=new",
+            headers=auth_headers,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            log_test("Test 4b: Filter status=new", False, f"Expected 200, got {response.status_code}")
+            return False
+        
+        data = response.json()
+        ravi_found = any(lead.get("name") == "Ravi Kumar" for lead in data["leads"])
+        
+        if not ravi_found:
+            log_test("Test 4b: Filter status=new", False, "Ravi Kumar not in status=new results")
+            return False
+        
+        log_test("Test 4b: Filter status=new", True, f"Ravi Kumar found in {len(data['leads'])} new leads")
+        
+    except Exception as e:
+        log_test("Test 4b: Filter status=new", False, f"Exception: {str(e)}")
+        return False
+    
+    # 4c: Search by name (q=ravi)
+    print("\n4c: Search q=ravi")
+    try:
+        response = requests.get(
+            f"{BASE_URL}/admin/leads?q=ravi",
+            headers=auth_headers,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            log_test("Test 4c: Search q=ravi", False, f"Expected 200, got {response.status_code}")
+            return False
+        
+        data = response.json()
+        ravi_found = any(lead.get("name") == "Ravi Kumar" for lead in data["leads"])
+        
+        if not ravi_found:
+            log_test("Test 4c: Search q=ravi", False, "Ravi Kumar not in search results")
+            return False
+        
+        log_test("Test 4c: Search q=ravi", True, f"Ravi Kumar found in {len(data['leads'])} results")
+        return True
+        
+    except Exception as e:
+        log_test("Test 4c: Search q=ravi", False, f"Exception: {str(e)}")
+        return False
+
+
+def test_5_admin_stats():
+    """Test 5: ADMIN stats (auth)"""
+    print("\n=== Test 5: ADMIN Lead Stats (Auth) ===")
+    
+    if not access_token:
+        log_test("Test 5: Admin stats", False, "No access token available")
+        return False
+    
+    auth_headers = {**HEADERS, "Authorization": f"Bearer {access_token}"}
+    
+    try:
+        response = requests.get(
+            f"{BASE_URL}/admin/leads/stats",
+            headers=auth_headers,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            log_test("Test 5: Admin stats", False, f"Expected 200, got {response.status_code}: {response.text}")
+            return False
+        
+        data = response.json()
+        
+        # Validate structure
+        required_keys = ["total", "by_status", "statuses"]
+        for key in required_keys:
+            if key not in data:
+                log_test("Test 5: Admin stats", False, f"Missing '{key}' in response")
+                return False
+        
+        if data["total"] < 1:
+            log_test("Test 5: Admin stats", False, f"Expected total>=1, got {data['total']}")
+            return False
+        
+        # Check by_status has all required statuses
+        expected_statuses = ["new", "contacted", "qualified", "converted", "closed"]
+        for status in expected_statuses:
+            if status not in data["by_status"]:
+                log_test("Test 5: Admin stats", False, f"Missing status '{status}' in by_status")
+                return False
+        
+        log_test("Test 5: Admin stats", True, f"total={data['total']}, by_status={data['by_status']}")
+        return True
+        
+    except Exception as e:
+        log_test("Test 5: Admin stats", False, f"Exception: {str(e)}")
+        return False
+
+
+def test_6_admin_lead_detail():
+    """Test 6: ADMIN lead detail (auth) - includes conversation"""
+    print("\n=== Test 6: ADMIN Lead Detail (Auth) ===")
+    
+    if not access_token:
+        log_test("Test 6: Admin lead detail", False, "No access token available")
+        return False
+    
+    if not lead_id:
+        log_test("Test 6: Admin lead detail", False, "No lead_id available from Test 3")
+        return False
+    
+    auth_headers = {**HEADERS, "Authorization": f"Bearer {access_token}"}
+    
+    try:
+        response = requests.get(
+            f"{BASE_URL}/admin/leads/{lead_id}",
+            headers=auth_headers,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            log_test("Test 6: Admin lead detail", False, f"Expected 200, got {response.status_code}: {response.text}")
+            return False
+        
+        data = response.json()
+        
+        # Validate structure
+        if "lead" not in data:
+            log_test("Test 6: Admin lead detail", False, "Missing 'lead' in response")
+            return False
+        
+        if "conversation" not in data:
+            log_test("Test 6: Admin lead detail", False, "Missing 'conversation' in response")
+            return False
+        
+        lead = data["lead"]
+        if lead.get("name") != "Ravi Kumar":
+            log_test("Test 6: Admin lead detail", False, f"Expected name='Ravi Kumar', got '{lead.get('name')}'")
+            return False
+        
+        # Check conversation has messages from test 1 and 2
+        conversation = data["conversation"]
+        if conversation:
+            messages = conversation.get("messages", [])
+            if len(messages) < 2:
+                log_test("Test 6: Admin lead detail", False, f"Expected at least 2 messages (from tests 1-2), got {len(messages)}")
+                return False
+            
+            # Check if session_id matches
+            if conversation.get("id") != "test-sess-1":
+                log_test("Test 6: Admin lead detail", False, f"Conversation session_id mismatch: expected 'test-sess-1', got '{conversation.get('id')}'")
+                return False
+            
+            log_test("Test 6: Admin lead detail", True, f"Lead: {lead['name']}, Conversation: {len(messages)} messages")
+        else:
+            log_test("Test 6: Admin lead detail", False, "Conversation is None/empty")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        log_test("Test 6: Admin lead detail", False, f"Exception: {str(e)}")
+        return False
+
+
+def test_7_admin_update_lead():
+    """Test 7: ADMIN update lead (auth) - valid and invalid status"""
+    print("\n=== Test 7: ADMIN Update Lead (Auth) ===")
+    
+    if not access_token:
+        log_test("Test 7: Admin update lead", False, "No access token available")
+        return False
+    
+    if not lead_id:
+        log_test("Test 7: Admin update lead", False, "No lead_id available from Test 3")
+        return False
+    
+    auth_headers = {**HEADERS, "Authorization": f"Bearer {access_token}"}
+    
+    # 7a: Valid update (status=contacted, notes)
+    print("\n7a: Valid update - status=contacted")
+    try:
+        response = requests.patch(
+            f"{BASE_URL}/admin/leads/{lead_id}",
+            headers=auth_headers,
+            json={"status": "contacted", "notes": "called the student"},
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            log_test("Test 7a: Valid update", False, f"Expected 200, got {response.status_code}: {response.text}")
+            return False
+        
+        data = response.json()
+        
+        if data.get("status") != "contacted":
+            log_test("Test 7a: Valid update", False, f"Expected status='contacted', got '{data.get('status')}'")
+            return False
+        
+        if data.get("notes") != "called the student":
+            log_test("Test 7a: Valid update", False, f"Expected notes='called the student', got '{data.get('notes')}'")
+            return False
+        
+        log_test("Test 7a: Valid update", True, f"status={data['status']}, notes={data['notes']}")
+        
+    except Exception as e:
+        log_test("Test 7a: Valid update", False, f"Exception: {str(e)}")
+        return False
+    
+    # 7b: Invalid status (should return 400)
+    print("\n7b: Invalid status - status=foo")
+    try:
+        response = requests.patch(
+            f"{BASE_URL}/admin/leads/{lead_id}",
+            headers=auth_headers,
+            json={"status": "foo"},
+            timeout=30
+        )
+        
+        if response.status_code != 400:
+            log_test("Test 7b: Invalid status", False, f"Expected 400, got {response.status_code}")
+            return False
+        
+        log_test("Test 7b: Invalid status", True, "Correctly rejected with 400")
+        return True
+        
+    except Exception as e:
+        log_test("Test 7b: Invalid status", False, f"Exception: {str(e)}")
+        return False
+
+
+def test_8_auth_gate():
+    """Test 8: Auth gate - admin endpoints require auth, public endpoints don't"""
+    print("\n=== Test 8: Auth Gate ===")
+    
+    # 8a: Admin endpoint without auth (should return 401)
+    print("\n8a: Admin endpoint without auth")
+    try:
+        response = requests.get(
+            f"{BASE_URL}/admin/leads",
+            headers=HEADERS,  # No Authorization header
+            timeout=30
+        )
+        
+        if response.status_code != 401:
+            log_test("Test 8a: Admin without auth", False, f"Expected 401, got {response.status_code}")
+            return False
+        
+        log_test("Test 8a: Admin without auth", True, "Correctly rejected with 401")
+        
+    except Exception as e:
+        log_test("Test 8a: Admin without auth", False, f"Exception: {str(e)}")
+        return False
+    
+    # 8b: Public chat endpoint without auth (should return 200)
+    print("\n8b: Public chat without auth")
+    try:
+        response = requests.post(
+            f"{BASE_URL}/assistant/chat",
+            headers=HEADERS,  # No Authorization header
+            json={"session_id": "test-auth-gate", "message": "test"},
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            log_test("Test 8b: Public chat without auth", False, f"Expected 200, got {response.status_code}")
+            return False
+        
+        log_test("Test 8b: Public chat without auth", True, "Works without auth (200)")
+        
+    except Exception as e:
+        log_test("Test 8b: Public chat without auth", False, f"Exception: {str(e)}")
+        return False
+    
+    # 8c: Public lead endpoint without auth (should return 200)
+    print("\n8c: Public lead without auth")
+    try:
+        response = requests.post(
+            f"{BASE_URL}/assistant/lead",
+            headers=HEADERS,  # No Authorization header
+            json={"name": "Test Auth Gate", "email": "test@example.com"},
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            log_test("Test 8c: Public lead without auth", False, f"Expected 200, got {response.status_code}")
+            return False
+        
+        log_test("Test 8c: Public lead without auth", True, "Works without auth (200)")
+        return True
+        
+    except Exception as e:
+        log_test("Test 8c: Public lead without auth", False, f"Exception: {str(e)}")
+        return False
+
+
+def test_9_regression():
+    """Test 9: Regression - existing endpoints still work"""
+    print("\n=== Test 9: Regression Tests ===")
+    
+    if not access_token:
+        log_test("Test 9: Regression", False, "No access token available")
+        return False
+    
+    auth_headers = {**HEADERS, "Authorization": f"Bearer {access_token}"}
+    
+    # 9a: GET /api/admin/sources (should return NIRF + AICTE + NAAC)
+    print("\n9a: GET /api/admin/sources")
+    try:
+        response = requests.get(
+            f"{BASE_URL}/admin/sources",
+            headers=auth_headers,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            log_test("Test 9a: Sources list", False, f"Expected 200, got {response.status_code}")
+            return False
+        
+        data = response.json()
+        sources = data.get("sources", [])
+        
+        if len(sources) < 3:
+            log_test("Test 9a: Sources list", False, f"Expected 3 sources (NIRF+AICTE+NAAC), got {len(sources)}")
+            return False
+        
+        source_types = [s.get("source_type") for s in sources]
+        expected = ["NIRF", "AICTE", "NAAC"]
+        for exp in expected:
+            if exp not in source_types:
+                log_test("Test 9a: Sources list", False, f"Missing source type '{exp}'")
+                return False
+        
+        log_test("Test 9a: Sources list", True, f"All 3 sources present: {source_types}")
+        
+    except Exception as e:
+        log_test("Test 9a: Sources list", False, f"Exception: {str(e)}")
+        return False
+    
+    # 9b: GET /api/admin/nirf/overview
+    print("\n9b: GET /api/admin/nirf/overview")
+    try:
+        response = requests.get(
+            f"{BASE_URL}/admin/nirf/overview",
+            headers=auth_headers,
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            log_test("Test 9b: NIRF overview", False, f"Expected 200, got {response.status_code}")
+            return False
+        
+        log_test("Test 9b: NIRF overview", True, "NIRF endpoint still working")
+        return True
+        
+    except Exception as e:
+        log_test("Test 9b: NIRF overview", False, f"Exception: {str(e)}")
+        return False
+
+
+def print_summary():
+    """Print test summary"""
     print("\n" + "="*80)
     print("TEST SUMMARY")
     print("="*80)
     
-    passed = sum(1 for v in results.values() if v)
-    total = len(results)
+    passed = sum(1 for r in test_results if r["passed"])
+    total = len(test_results)
     
-    for test_name, result in results.items():
-        symbol = "✅" if result else "❌"
-        print(f"{symbol} {test_name}")
+    print(f"\nTotal Tests: {total}")
+    print(f"Passed: {passed}")
+    print(f"Failed: {total - passed}")
+    print(f"Success Rate: {(passed/total*100):.1f}%")
+    
+    if total - passed > 0:
+        print("\n❌ FAILED TESTS:")
+        for r in test_results:
+            if not r["passed"]:
+                print(f"  - {r['test']}")
+                if r["details"]:
+                    print(f"    {r['details']}")
     
     print("\n" + "="*80)
-    print(f"TOTAL: {passed}/{total} tests passed ({passed*100//total}%)")
+    
+    return passed == total
+
+
+def main():
+    """Run all tests in sequence"""
+    print("="*80)
+    print("Filed Platform - Support/Admissions Assistant + Leads CRM Testing")
+    print("="*80)
+    print(f"Backend URL: {BASE_URL}")
+    print(f"User-Agent: {HEADERS['User-Agent'][:80]}...")
     print("="*80)
     
-    if passed == total:
-        print("\n🎉 ALL TESTS PASSED!")
-    else:
-        print(f"\n⚠️  {total - passed} test(s) failed")
+    # Get admin token first
+    if not get_admin_token():
+        print("\n❌ CRITICAL: Failed to get admin token. Cannot proceed with admin tests.")
+        sys.exit(1)
+    
+    # Run tests in sequence
+    test_1_public_chat()
+    test_2_multi_turn()
+    test_3_lead_capture()
+    test_4_admin_leads_list()
+    test_5_admin_stats()
+    test_6_admin_lead_detail()
+    test_7_admin_update_lead()
+    test_8_auth_gate()
+    test_9_regression()
+    
+    # Print summary
+    all_passed = print_summary()
+    
+    sys.exit(0 if all_passed else 1)
+
 
 if __name__ == "__main__":
     main()

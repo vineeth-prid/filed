@@ -44,6 +44,7 @@ from auth import (
 import data_sources_service as ds
 import aicte_connector
 import naac_connector
+import assistant_service
 
 
 # MongoDB connection
@@ -1042,6 +1043,78 @@ async def admin_naac_set_schedule(req: NaacScheduleRequest):
 # ----------------- /NAAC -----------------
 
 
+# ============================================================================
+# Support & Admissions Assistant (public) + Leads management (admin)
+# Powered by the self-hosted Ollama models. No third-party API key.
+# ============================================================================
+class AssistantChatRequest(BaseModel):
+    session_id: Optional[str] = None
+    message: str
+
+
+class LeadRequest(BaseModel):
+    session_id: Optional[str] = None
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    interest: Optional[str] = None
+    location: Optional[str] = None
+    message: Optional[str] = None
+
+
+class LeadUpdateRequest(BaseModel):
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@api_router.post("/assistant/chat")
+async def assistant_chat(req: AssistantChatRequest, request: Request):
+    # Coarse per-IP cap so the public endpoint can't be abused.
+    if not limiter.check(f"assistant:{client_ip(request)}", 30, 60):
+        raise HTTPException(429, "Too many messages. Please slow down.")
+    return await assistant_service.reply(db, req.session_id, req.message)
+
+
+@api_router.post("/assistant/lead")
+async def assistant_lead(req: LeadRequest, request: Request):
+    if not limiter.check(f"lead:{client_ip(request)}", 10, 300):
+        raise HTTPException(429, "Too many submissions. Please try again later.")
+    result = await assistant_service.submit_lead(db, req.dict())
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error", "Could not save your details."))
+    return result
+
+
+@api_router.get("/admin/leads")
+async def admin_list_leads(status: Optional[str] = None, q: Optional[str] = None,
+                           limit: int = Query(100, ge=1, le=MAX_PAGE_SIZE), offset: int = Query(0, ge=0)):
+    return await assistant_service.list_leads(db, status=status, q=q, limit=limit, offset=offset)
+
+
+@api_router.get("/admin/leads/stats")
+async def admin_lead_stats():
+    return await assistant_service.lead_stats(db)
+
+
+@api_router.get("/admin/leads/{lead_id}")
+async def admin_lead_detail(lead_id: str):
+    detail = await assistant_service.lead_detail(db, lead_id)
+    if not detail:
+        raise HTTPException(404, "Lead not found")
+    return detail
+
+
+@api_router.patch("/admin/leads/{lead_id}")
+async def admin_update_lead(lead_id: str, req: LeadUpdateRequest):
+    res = await assistant_service.update_lead(db, lead_id, req.status, req.notes)
+    if res is None:
+        raise HTTPException(404, "Lead not found")
+    if isinstance(res, dict) and res.get("error"):
+        raise HTTPException(400, res["error"])
+    return res
+# ----------------- /Assistant + Leads -----------------
+
+
 app.include_router(api_router)
 
 
@@ -1171,6 +1244,9 @@ async def _ensure_indexes():
     await db.naac_document_links.create_index([("hei_assessment_id", 1), ("doc_type", 1)])
     await db.naac_raw_html.create_index([("hei_assessment_id", 1), ("kind", 1)])
     await db.naac_raw_pdf.create_index([("document_id", 1)])
+    await db.leads.create_index([("status", 1), ("created_at", -1)])
+    await db.leads.create_index([("created_at", -1)])
+    await db.assistant_conversations.create_index([("id", 1)])
     for coll in JOB_COLLECTIONS:
         await db[coll].create_index([("created_at", -1)])
         await db[coll].create_index([("id", 1)])

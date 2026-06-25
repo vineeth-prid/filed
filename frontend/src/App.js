@@ -21,6 +21,8 @@ import AdminLogin from "./pages/AdminLogin";
 import AdminSources from "./pages/AdminSources";
 import AdminAICTE from "./pages/AdminAICTE";
 import AdminNAAC from "./pages/AdminNAAC";
+import AdminLeads from "./pages/AdminLeads";
+import AssistantWidget from "./components/AssistantWidget";
 
 const protect = (el) => <ProtectedRoute>{el}</ProtectedRoute>;
 
@@ -48,7 +50,9 @@ function App() {
             <Route path="/admin/sources" element={protect(<AdminSources />)} />
             <Route path="/admin/aicte" element={protect(<AdminAICTE />)} />
             <Route path="/admin/naac" element={protect(<AdminNAAC />)} />
+            <Route path="/admin/leads" element={protect(<AdminLeads />)} />
           </Routes>
+          <AssistantWidget />
         </AuthProvider>
       </BrowserRouter>
       <Toaster position="bottom-right" theme="light" />

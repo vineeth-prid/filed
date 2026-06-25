@@ -57,6 +57,8 @@ class Settings:
         self.ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
         self.ollama_model    = os.environ.get("OLLAMA_MODEL", "llama3.2")
         self.ollama_timeout  = int(os.environ.get("OLLAMA_TIMEOUT", "120"))
+        # Support/admissions assistant model (their server has llama3.2:3b & qwen3:8b).
+        self.assistant_model = os.environ.get("ASSISTANT_MODEL", "llama3.2:3b")
 
         # ---- CORS ----
         raw_cors = os.environ.get("CORS_ORIGINS", "").strip()

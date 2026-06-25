@@ -77,6 +77,38 @@ async def chat(system_prompt: str, user_prompt: str) -> str:
         raise OllamaError(f"Unexpected Ollama response format: {resp.text[:200]}") from exc
 
 
+async def chat_with_history(messages: list[dict], model: str | None = None,
+                            temperature: float = 0.4, num_predict: int = 600) -> str:
+    """Multi-turn chat completion. `messages` is a full [{role, content}, ...] list.
+    Returns the model's reply string. Raises OllamaError on failure."""
+    url = f"{settings.ollama_base_url}/api/chat"
+    payload = {
+        "model": model or settings.ollama_model,
+        "stream": False,
+        "options": {"temperature": temperature, "num_predict": num_predict},
+        "messages": messages,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=settings.ollama_timeout) as client:
+            resp = await client.post(url, json=payload)
+            resp.raise_for_status()
+    except httpx.ConnectError as exc:
+        raise OllamaError(
+            f"Cannot reach Ollama at {settings.ollama_base_url}. Ensure the Ollama service is running."
+        ) from exc
+    except httpx.TimeoutException as exc:
+        raise OllamaError(f"Ollama request timed out after {settings.ollama_timeout}s.") from exc
+    except httpx.HTTPStatusError as exc:
+        raise OllamaError(
+            f"Ollama returned HTTP {exc.response.status_code}: {exc.response.text[:200]}"
+        ) from exc
+    try:
+        data = resp.json()
+        return data["message"]["content"]
+    except (KeyError, ValueError) as exc:
+        raise OllamaError(f"Unexpected Ollama response format: {resp.text[:200]}") from exc
+
+
 async def health_check() -> dict:
     """Return {ok, model, base_url} — useful for the admin dashboard."""
     try:
