@@ -43,6 +43,7 @@ from auth import (
 )
 import data_sources_service as ds
 import aicte_connector
+import naac_connector
 
 
 # MongoDB connection
@@ -893,6 +894,147 @@ async def admin_aicte_renormalize(academic_year: Optional[str] = None):
 # ----------------- /Data Sources + AICTE -----------------
 
 
+# ============================================================================
+# NAAC Connector (Hybrid Web) — independent; plugs into the Data Sources layer.
+# Does not touch NIRF or AICTE.
+# ============================================================================
+class NaacSyncRequest(BaseModel):
+    mode: str = "manual"  # manual | single | state | cycle | scheduled
+    filters: Dict[str, Any] = {}
+    hei_assessment_id: Optional[int] = None
+    status: Optional[Any] = 5
+    state: Optional[Any] = None
+    cycle: Optional[Any] = None
+    limit: int = 25
+    download_pdfs: bool = True
+    extract_pdfs: bool = True
+
+
+class NaacScheduleRequest(BaseModel):
+    enabled: bool = False
+    interval_hours: int = 24
+    params: Dict[str, Any] = {}
+
+
+def _naac_sync_params(req: NaacSyncRequest) -> dict:
+    return {
+        "mode": req.mode,
+        "filters": req.filters or {},
+        "hei_assessment_id": req.hei_assessment_id,
+        "status": req.status,
+        "state": req.state,
+        "cycle": req.cycle,
+        "limit": req.limit,
+        "download_pdfs": req.download_pdfs,
+        "extract_pdfs": req.extract_pdfs,
+        "run_type": req.mode,
+    }
+
+
+@api_router.get("/admin/naac/overview")
+async def admin_naac_overview():
+    return await naac_connector.overview(db)
+
+
+@api_router.post("/admin/naac/sync")
+async def admin_naac_sync(req: NaacSyncRequest):
+    src = await db.data_sources.find_one({"source_type": "NAAC"}, {"_id": 0})
+    if not src:
+        await ds.seed_sources(db)
+        src = await db.data_sources.find_one({"source_type": "NAAC"}, {"_id": 0})
+    params = _naac_sync_params(req)
+    run_id = await ds.create_run(db, src, run_type=req.mode, params=params)
+    _spawn(ds.run_source_sync(db, src, run_id, params))
+    return {"run_id": run_id, "status": "Queued", "mode": req.mode}
+
+
+@api_router.get("/admin/naac/institutions")
+async def admin_naac_institutions(q: Optional[str] = None, state: Optional[str] = None,
+                                  grade: Optional[str] = None,
+                                  limit: int = Query(100, ge=1, le=MAX_PAGE_SIZE), offset: int = Query(0, ge=0)):
+    query: dict = {}
+    if state:
+        query["state"] = state
+    if grade:
+        query["grade"] = grade
+    if q:
+        query["hei_name"] = {"$regex": re.escape(q), "$options": "i"}
+    total = await db.naac_institutions.count_documents(query)
+    rows = await db.naac_institutions.find(query, {"_id": 0}).sort("hei_name", 1).skip(offset).to_list(limit)
+    return {"institutions": rows, "total": total}
+
+
+@api_router.get("/admin/naac/institutions/{hei_assessment_id}")
+async def admin_naac_institution_detail(hei_assessment_id: int):
+    inst = await db.naac_institutions.find_one({"hei_assessment_id": hei_assessment_id}, {"_id": 0})
+    if not inst:
+        raise HTTPException(404, "Institution not found")
+    assessments = await db.naac_assessments.find({"hei_assessment_id": hei_assessment_id}, {"_id": 0}).to_list(100)
+    links = await db.naac_document_links.find({"hei_assessment_id": hei_assessment_id}, {"_id": 0}).to_list(100)
+    documents = await db.naac_documents.find(
+        {"hei_assessment_id": hei_assessment_id}, {"_id": 0, "extraction": 0}
+    ).sort("version", 1).to_list(100)
+    return {"institution": inst, "assessments": assessments, "document_links": links, "documents": documents}
+
+
+@api_router.get("/admin/naac/assessments")
+async def admin_naac_assessments(q: Optional[str] = None,
+                                 limit: int = Query(100, ge=1, le=MAX_PAGE_SIZE), offset: int = Query(0, ge=0)):
+    query: dict = {}
+    if q:
+        query["institution_name"] = {"$regex": re.escape(q), "$options": "i"}
+    total = await db.naac_assessments.count_documents(query)
+    rows = await db.naac_assessments.find(query, {"_id": 0}).sort("institution_name", 1).skip(offset).to_list(limit)
+    return {"assessments": rows, "total": total}
+
+
+@api_router.get("/admin/naac/documents")
+async def admin_naac_documents(doc_type: Optional[str] = None, extraction_status: Optional[str] = None,
+                               limit: int = Query(100, ge=1, le=MAX_PAGE_SIZE), offset: int = Query(0, ge=0)):
+    query: dict = {}
+    if doc_type:
+        query["doc_type"] = doc_type
+    if extraction_status:
+        query["extraction_status"] = extraction_status
+    total = await db.naac_documents.count_documents(query)
+    rows = await db.naac_documents.find(query, {"_id": 0, "extraction": 0}).sort("download_date", -1).skip(offset).to_list(limit)
+    return {"documents": rows, "total": total}
+
+
+@api_router.get("/admin/naac/documents/{document_id}/extraction")
+async def admin_naac_document_extraction(document_id: str):
+    doc = await db.naac_documents.find_one({"id": document_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    return doc
+
+
+@api_router.get("/admin/naac/document-links")
+async def admin_naac_document_links(limit: int = Query(200, ge=1, le=MAX_PAGE_SIZE)):
+    rows = await db.naac_document_links.find({}, {"_id": 0}).sort("discovered_at", -1).to_list(limit)
+    return {"document_links": rows}
+
+
+@api_router.get("/admin/naac/schedule")
+async def admin_naac_get_schedule():
+    sched = await db.naac_schedule.find_one({"id": "naac"}, {"_id": 0})
+    return sched or {"id": "naac", "enabled": False, "interval_hours": 24, "params": {}, "last_run_at": None}
+
+
+@api_router.put("/admin/naac/schedule")
+async def admin_naac_set_schedule(req: NaacScheduleRequest):
+    doc = {
+        "id": "naac",
+        "enabled": req.enabled,
+        "interval_hours": max(1, req.interval_hours),
+        "params": req.params or {"mode": "manual", "limit": 25},
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.naac_schedule.update_one({"id": "naac"}, {"$set": doc}, upsert=True)
+    return await db.naac_schedule.find_one({"id": "naac"}, {"_id": 0})
+# ----------------- /NAAC -----------------
+
+
 app.include_router(api_router)
 
 
@@ -1012,9 +1154,57 @@ async def _ensure_indexes():
     await db.aicte_raw_payloads.create_index([("academic_year", 1), ("fetched_at", -1)])
     await db.aicte_records.create_index([("academic_year", 1), ("source_category", 1)])
     await db.aicte_records.create_index([("collegename", 1)])
+    # NAAC connector indexes (additive).
+    await db.naac_institutions.create_index([("hei_assessment_id", 1)], unique=True)
+    await db.naac_institutions.create_index([("state", 1)])
+    await db.naac_institutions.create_index([("hei_name", 1)])
+    await db.naac_assessments.create_index([("hei_assessment_id", 1)])
+    await db.naac_documents.create_index([("hei_assessment_id", 1), ("doc_type", 1), ("version", 1)])
+    await db.naac_documents.create_index([("checksum", 1)])
+    await db.naac_document_links.create_index([("hei_assessment_id", 1), ("doc_type", 1)])
+    await db.naac_raw_html.create_index([("hei_assessment_id", 1), ("kind", 1)])
+    await db.naac_raw_pdf.create_index([("document_id", 1)])
     for coll in JOB_COLLECTIONS:
         await db[coll].create_index([("created_at", -1)])
         await db[coll].create_index([("id", 1)])
+
+
+async def _naac_scheduler_loop():
+    """Lightweight in-process scheduler for NAAC. Runs while the server is up; checks
+    the naac_schedule config every minute and triggers a sync when due. (No extra
+    dependency — recommended for single-process deployments.)"""
+    await asyncio.sleep(20)  # let startup settle
+    while True:
+        try:
+            sched = await db.naac_schedule.find_one({"id": "naac"})
+            if sched and sched.get("enabled"):
+                interval = max(1, int(sched.get("interval_hours", 24)))
+                last = sched.get("last_run_at")
+                due = True
+                if last:
+                    try:
+                        last_dt = datetime.fromisoformat(last)
+                        due = (datetime.now(timezone.utc) - last_dt).total_seconds() >= interval * 3600
+                    except (ValueError, TypeError):
+                        due = True
+                # Don't start if a NAAC run is already active.
+                active = await db.sync_runs.count_documents(
+                    {"source_type": "NAAC", "status": {"$in": ["Queued", "Running"]}}
+                )
+                if due and not active:
+                    src = await db.data_sources.find_one({"source_type": "NAAC"}, {"_id": 0})
+                    if src:
+                        params = sched.get("params") or {"mode": "manual", "limit": 25}
+                        params.setdefault("run_type", "scheduled")
+                        run_id = await ds.create_run(db, src, run_type="scheduled", params=params)
+                        _spawn(ds.run_source_sync(db, src, run_id, params))
+                        await db.naac_schedule.update_one(
+                            {"id": "naac"}, {"$set": {"last_run_at": datetime.now(timezone.utc).isoformat()}}
+                        )
+                        logger.info("NAAC scheduler triggered run %s", run_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("NAAC scheduler loop error")
+        await asyncio.sleep(60)
 
 
 @app.on_event("startup")
@@ -1024,6 +1214,7 @@ async def on_startup():
     await aicte_connector.seed_endpoints(db)
     await _ensure_indexes()
     await _reconcile_orphaned_jobs()
+    _spawn(_naac_scheduler_loop())
     llm_status = await ollama_health()
     if llm_status["ok"] and llm_status.get("model_ready"):
         logger.info("Ollama ready — model: %s", settings.ollama_model)

@@ -20,6 +20,7 @@ import AdminHome from "./pages/AdminHome";
 import AdminLogin from "./pages/AdminLogin";
 import AdminSources from "./pages/AdminSources";
 import AdminAICTE from "./pages/AdminAICTE";
+import AdminNAAC from "./pages/AdminNAAC";
 
 const protect = (el) => <ProtectedRoute>{el}</ProtectedRoute>;
 
@@ -46,6 +47,7 @@ function App() {
             <Route path="/admin/nirf/refresh" element={protect(<AdminRefresh />)} />
             <Route path="/admin/sources" element={protect(<AdminSources />)} />
             <Route path="/admin/aicte" element={protect(<AdminAICTE />)} />
+            <Route path="/admin/naac" element={protect(<AdminNAAC />)} />
           </Routes>
         </AuthProvider>
       </BrowserRouter>

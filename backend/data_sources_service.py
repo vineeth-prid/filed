@@ -19,6 +19,7 @@ import logging
 from datetime import datetime, timezone
 
 import aicte_connector
+import naac_connector
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ def _now() -> str:
 DEFAULT_SOURCES = [
     {"source_name": "NIRF", "source_type": "NIRF", "connector_type": "scraper", "status": "active"},
     {"source_name": "AICTE", "source_type": "AICTE", "connector_type": "json_api", "status": "active"},
+    {"source_name": "NAAC", "source_type": "NAAC", "connector_type": "hybrid_web", "status": "active"},
 ]
 
 
@@ -101,10 +103,19 @@ async def _aicte_sync(db, run_id, source, params) -> None:
     await aicte_connector.run_sync(db, run_id, year, run_type)
 
 
+async def _naac_stats(db, source) -> dict:
+    return await naac_connector.stats_for_source(db)
+
+
+async def _naac_sync(db, run_id, source, params) -> None:
+    await naac_connector.run_sync(db, run_id, params or {})
+
+
 CONNECTORS = {
     "NIRF": {"stats": _nirf_stats, "sync": _nirf_sync},
     "AICTE": {"stats": _aicte_stats, "sync": _aicte_sync},
-    # Future: "NAAC": {...}, "TNEA": {...}, "AISHE": {...}
+    "NAAC": {"stats": _naac_stats, "sync": _naac_sync},
+    # Future: "TNEA": {...}, "AISHE": {...}
 }
 
 
