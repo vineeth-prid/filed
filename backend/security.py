@@ -210,7 +210,7 @@ class AntiScrapingMiddleware(BaseHTTPMiddleware):
 # 6.  Honeypot — traps for common vulnerability scanners
 # ---------------------------------------------------------------------------
 _HONEYPOT_PATHS = {
-    "/admin", "/wp-admin", "/wp-login.php", "/.env", "/.git/config",
+    "/wp-admin", "/wp-login.php", "/.env", "/.git/config",
     "/phpinfo.php", "/config.php", "/setup.php", "/install.php",
     "/actuator", "/actuator/health", "/debug", "/console",
     "/.aws/credentials", "/etc/passwd",
