@@ -112,3 +112,19 @@ Build a high-fidelity product prototype for **Filed**, an Education Due Diligenc
   - UI `/admin/aicte` (`AdminAICTE.jsx`): Overview, Endpoints (toggle active), Records (filters/search), Raw Payloads (view JSON), Sync History; year picker + Manual Sync with live progress + simulated-origin banner.
 - Admin hub (`AdminHome.jsx`) gains a "Data Sources Platform" section (Data Sources + AICTE cards); NIRF cards untouched.
 - Verified: backend 12/12 PASSED (incl. NIRF read-only regression + idempotency). Testing agent also fixed a pre-existing `security.py` MutableHeaders.pop bug. Frontend not yet tested (awaiting user approval).
+
+## NAAC Connector — Hybrid Web (Jul 2025)
+- Third independent connector, plugged into the existing Data Sources registry (source registration + connector impl only; **NIRF & AICTE untouched**). connector_type="hybrid_web".
+- Source: NAAC HEI dashboard (assessmentonline.naac.gov.in). Geo-blocked from sandbox → runs LIVE on user's India server; sync fails cleanly when unreachable (no fabricated accreditation data). Optional NAAC_PROXY_URL.
+- 6 collections: naac_institutions, naac_assessments, naac_documents, naac_document_links, naac_raw_html, naac_raw_pdf.
+- Pipeline (modeled exactly on user's captured DevTools requests, parsers verified offline against real data):
+  - Discovery: GET /hei_dashboard DataTables JSON (CSRF _token + session cookie bootstrap) with filters inst_type/state/cycle/iiqa_status/inst_name, paginated.
+  - Detail: GET /hei_dashboard/{id}?status=N → HTML modal parsed (bs4): institution name+code, IIQA/SSR dates+status, 4 report links, previous assessments (cycle/date/grade/cgpa/ec/certificate).
+  - PDF discovery → register links (iiqa_report/ssr_report/peerteam_report/grade_sheet_rpt).
+  - PDF download: versioned, checksummed (sha256), never overwrite, stored on disk (storage/naac) + naac_raw_pdf + naac_documents metadata.
+  - PDF extraction: full text + tables per page (pdfplumber), all sections, extraction metadata. No metrics.
+  - Normalization: keep all source fields, no scores/KPIs/rankings.
+- Sync modes: manual / single-institution / state / cycle + lightweight in-process Scheduled sync (naac_schedule config, asyncio loop, no extra dependency).
+- Monitoring: institutions synced, assessments imported, PDFs downloaded, extraction success, failed downloads, failed parsing.
+- APIs (/api/admin/naac/*): overview, sync, institutions(+/{id}), assessments, documents(+/{id}/extraction), document-links, schedule(GET/PUT). NAAC admin UI /admin/naac (AdminNAAC.jsx) + hub card.
+- Verified: backend 9/9 PASSED (framework wiring, graceful geo-block failure, schedule persistence, NIRF+AICTE regression, auth gate). Parsers verified offline against user's real list JSON + modal HTML (== cit.json). Frontend not yet auto-tested (awaiting user approval).
