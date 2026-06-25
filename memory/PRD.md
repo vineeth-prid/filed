@@ -128,3 +128,12 @@ Build a high-fidelity product prototype for **Filed**, an Education Due Diligenc
 - Monitoring: institutions synced, assessments imported, PDFs downloaded, extraction success, failed downloads, failed parsing.
 - APIs (/api/admin/naac/*): overview, sync, institutions(+/{id}), assessments, documents(+/{id}/extraction), document-links, schedule(GET/PUT). NAAC admin UI /admin/naac (AdminNAAC.jsx) + hub card.
 - Verified: backend 9/9 PASSED (framework wiring, graceful geo-block failure, schedule persistence, NIRF+AICTE regression, auth gate). Parsers verified offline against user's real list JSON + modal HTML (== cit.json). Frontend not yet auto-tested (awaiting user approval).
+
+## Support/Admissions Assistant + Leads CRM (Jul 2025)
+- **Emergent badge removed** from public/index.html; replaced by an on-site **Filed Assistant** floating widget (bottom-right). Widget hidden on /admin routes.
+- **Admin nav link removed** from the public Navbar (team uses /admin directly; route still protected). Logout still shows when authed.
+- **Assistant** (`assistant_service.py`): powered by the user's self-hosted Ollama (no cost / no API key). Model via ASSISTANT_MODEL env, default `llama3.2:3b` (set `qwen3:8b` for higher quality). Multi-turn, session-based; strips qwen `<think>` blocks; graceful fallback reply when Ollama unreachable (returns 200, never 500). Reuses `ollama_client.chat_with_history` (new additive fn).
+- **Lead capture:** keyword intent detection surfaces an in-chat lead form; POST /api/assistant/lead validates (name required, email OR phone) → stored in `leads` + linked to `assistant_conversations` by session_id.
+- **Public endpoints (no auth):** POST /api/assistant/chat, POST /api/assistant/lead (per-IP rate-limited).
+- **Admin Leads CRM** (`AdminLeads.jsx`, /admin/leads + hub card): list/filter by status, search, detail modal (contact, interest, message, conversation transcript), status workflow new→contacted→qualified→converted→closed, internal notes. APIs: GET /api/admin/leads(+/stats,+/{id}), PATCH /api/admin/leads/{id}.
+- Verified: backend 19/19 PASSED (chat fallback, multi-turn persistence, lead validation, CRM list/stats/detail/update, auth gates, NIRF/AICTE/NAAC regression). Frontend visually verified (badge gone, assistant renders, Admin link gone); full frontend auto-test pending user approval.
