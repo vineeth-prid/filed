@@ -15,6 +15,7 @@ real schema, so the full pipeline stays demonstrable. data_origin is surfaced ev
 """
 import uuid
 import logging
+import os
 import random
 from datetime import datetime, timezone
 
@@ -127,9 +128,18 @@ def _coerce_list(data) -> list:
 
 
 async def fetch_live(year: str, category: str, base: str = AICTE_BASE_URL) -> list:
-    """Attempt a real fetch from the AICTE endpoint. Raises on any failure."""
+    """Attempt a real fetch from the AICTE endpoint. Raises on any failure.
+
+    If AICTE_PROXY_URL is set in the environment, the request is routed through that
+    proxy. AICTE's servers reject foreign / datacenter IPs at the TLS layer, so an
+    India-reachable proxy is required to fetch live data from outside India.
+    """
     url = build_url(year, category, base)
-    async with httpx.AsyncClient(timeout=20.0, verify=False, headers=_HTTP_HEADERS, follow_redirects=True) as client:
+    proxy = (os.environ.get("AICTE_PROXY_URL") or "").strip() or None
+    client_kwargs = dict(timeout=25.0, verify=False, headers=_HTTP_HEADERS, follow_redirects=True)
+    if proxy:
+        client_kwargs["proxy"] = proxy
+    async with httpx.AsyncClient(**client_kwargs) as client:
         r = await client.get(url)
         r.raise_for_status()
         try:
@@ -139,6 +149,25 @@ async def fetch_live(year: str, category: str, base: str = AICTE_BASE_URL) -> li
             import json as _json
             data = _json.loads(r.text)
         return _coerce_list(data)
+
+
+async def probe(year: str = DEFAULT_YEAR, category: str = "NRI", base: str = AICTE_BASE_URL) -> dict:
+    """Read-only live connectivity test (no DB writes). Tells you whether the
+    AICTE endpoint is reachable from this server (optionally via AICTE_PROXY_URL)."""
+    url = build_url(year, category, base)
+    proxy = (os.environ.get("AICTE_PROXY_URL") or "").strip() or None
+    try:
+        records = await fetch_live(year, category, base)
+        return {
+            "reachable": True, "url": url, "via_proxy": bool(proxy),
+            "record_count": len(records), "sample": records[:2],
+        }
+    except Exception as e:  # noqa: BLE001
+        return {
+            "reachable": False, "url": url, "via_proxy": bool(proxy),
+            "error": f"{type(e).__name__}: {str(e)[:200]}",
+            "hint": "AICTE blocks non-India / datacenter IPs at the TLS layer. Set AICTE_PROXY_URL to an India-reachable proxy to fetch live.",
+        }
 
 
 # ---------------- Simulated fallback (clearly labelled) ----------------

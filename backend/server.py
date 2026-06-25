@@ -878,6 +878,12 @@ async def admin_aicte_payload(payload_id: str):
 async def admin_aicte_years():
     years = sorted(await db.aicte_records.distinct("academic_year"))
     return {"years": years}
+
+
+@api_router.get("/admin/aicte/test-connection")
+async def admin_aicte_test_connection(academic_year: Optional[str] = None, category: str = "NRI"):
+    """Live, read-only reachability probe of the AICTE endpoint (no data written)."""
+    return await aicte_connector.probe(academic_year or aicte_connector.DEFAULT_YEAR, category)
 # ----------------- /Data Sources + AICTE -----------------
 
 
