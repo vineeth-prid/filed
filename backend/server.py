@@ -936,6 +936,13 @@ async def admin_naac_overview():
     return await naac_connector.overview(db)
 
 
+@api_router.get("/admin/naac/filters")
+async def admin_naac_filters():
+    """Discover the portal's real filter dropdown options (value+label).
+    Returns ok=false gracefully when the NAAC portal is unreachable."""
+    return await naac_connector.discover_filters_safe(db)
+
+
 @api_router.post("/admin/naac/sync")
 async def admin_naac_sync(req: NaacSyncRequest):
     src = await db.data_sources.find_one({"source_type": "NAAC"}, {"_id": 0})

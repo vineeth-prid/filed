@@ -138,7 +138,66 @@ async def fetch_list_page(client, token, filters, start, length) -> dict:
     params = build_list_params(token, filters, start, length)
     r = await client.get(DASHBOARD_URL, params=params)
     r.raise_for_status()
+    ctype = r.headers.get("content-type", "")
+    body = r.text
+    if "application/json" not in ctype.lower() and not body.lstrip().startswith("{"):
+        # The DataTables endpoint should return JSON. HTML here usually means the
+        # CSRF _token / session was rejected or we were redirected to a login page.
+        snippet = re.sub(r"\s+", " ", body[:200]).strip()
+        raise RuntimeError(
+            f"List endpoint returned non-JSON (status {r.status_code}, content-type '{ctype}'). "
+            f"Likely a CSRF/session issue or the portal blocked the request. First 200 chars: {snippet}"
+        )
     return r.json()
+
+
+# ----------------------------- Filter discovery (dropdown options) -----------------------------
+# The dashboard page renders <select> dropdowns for the filters; we scrape their
+# real value/label options so the UI shows friendly choices instead of raw IDs.
+_FILTER_SELECTS = {
+    "inst_type": ["inst_type", "institution_type", "insttype", "inst_type_id"],
+    "state": ["state", "state_id", "state_name"],
+    "cycle": ["cycle", "cycle_no", "cycle_id"],
+    "iiqa_status": ["iiqa_status", "status", "iiqa_status_id"],
+}
+
+
+async def discover_filters(client) -> dict:
+    """Scrape the dashboard page <select> dropdowns -> {filter: [{value,label}, ...]}."""
+    r = await client.get(DASHBOARD_URL, headers={**_HTTP_HEADERS, "Accept": "text/html,*/*"})
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
+    out: dict = {}
+    for key, names in _FILTER_SELECTS.items():
+        sel = None
+        for n in names:
+            sel = soup.find("select", attrs={"name": n}) or soup.find("select", id=n)
+            if sel:
+                break
+        opts = []
+        if sel:
+            for o in sel.find_all("option"):
+                label = _clean(o.get_text())
+                val = (o.get("value") or "").strip()
+                if label and label.lower() not in ("select", "--select--", "choose"):
+                    opts.append({"value": val, "label": label})
+        out[key] = opts
+    return out
+
+
+async def discover_filters_safe(db) -> dict:
+    """Wrapper that opens a client and never raises — returns {ok, filters|error}.
+    On the sandbox (NAAC geo-blocked) this returns ok=false; on the India server it
+    returns the real labelled dropdown options."""
+    try:
+        async with httpx.AsyncClient(**_client_kwargs()) as client:
+            filters = await discover_filters(client)
+        has_any = any(filters.get(k) for k in filters)
+        return {"ok": has_any, "filters": filters,
+                "note": None if has_any else "Dropdowns were empty in the page HTML (they may load via JS). Use manual IDs."}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "filters": {}, "error": f"{type(e).__name__}: {str(e)[:160]}",
+                "hint": "NAAC portal not reachable from this environment. On your India server this returns the real options."}
 
 
 def _clean(s):

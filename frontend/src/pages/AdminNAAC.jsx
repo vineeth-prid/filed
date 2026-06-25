@@ -70,6 +70,26 @@ export default function AdminNAAC() {
   const [limit, setLimit] = useState(25);
   const [downloadPdfs, setDownloadPdfs] = useState(true);
   const [extractPdfs, setExtractPdfs] = useState(true);
+  // filter dropdown options discovered from the portal
+  const [filterOpts, setFilterOpts] = useState(null);
+  const [filterStatus, setFilterStatus] = useState("idle"); // idle | loading | ok | manual
+  const [filterNote, setFilterNote] = useState("");
+
+  const loadFilters = useCallback(async () => {
+    setFilterStatus("loading");
+    try {
+      const { data } = await axios.get(`${API}/admin/naac/filters`);
+      if (data.ok && data.filters) {
+        setFilterOpts(data.filters); setFilterStatus("ok"); setFilterNote("");
+      } else {
+        setFilterOpts(null); setFilterStatus("manual");
+        setFilterNote(data.error || data.note || "Portal dropdowns unavailable from here — enter IDs manually.");
+      }
+    } catch (e) {
+      setFilterOpts(null); setFilterStatus("manual");
+      setFilterNote("Could not load filter options — enter IDs manually.");
+    }
+  }, []);
 
   const fetchOverview = useCallback(async () => {
     const { data } = await axios.get(`${API}/admin/naac/overview`); setOv(data);
@@ -93,6 +113,7 @@ export default function AdminNAAC() {
 
   useEffect(() => { fetchOverview(); fetchDocuments(); fetchRuns(); fetchSchedule(); }, [fetchOverview, fetchDocuments, fetchRuns, fetchSchedule]);
   useEffect(() => { fetchInstitutions(); }, [fetchInstitutions]);
+  useEffect(() => { if (tab === "sync" && filterStatus === "idle") loadFilters(); }, [tab, filterStatus, loadFilters]);
 
   const sync = async () => {
     setBusy(true);
@@ -188,32 +209,65 @@ export default function AdminNAAC() {
 
         {tab === "sync" && (
           <div data-testid="naac-sync" className="border border-border bg-white p-6 max-w-3xl">
+            {/* Mode selector with descriptions */}
+            <div className="mb-5">
+              <div className="text-[9px] uppercase tracking-wider text-slate2 font-mono mb-2">What do you want to sync?</div>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {[
+                  ["manual", "Filtered sync", "Discover institutions matching the filters below."],
+                  ["state", "State sync", "All institutions in one state."],
+                  ["cycle", "Cycle sync", "Institutions of a given assessment cycle."],
+                  ["single", "Single institution", "One institution by its HEI ID."],
+                ].map(([val, title, desc]) => (
+                  <button key={val} type="button" onClick={() => setMode(val)}
+                    className={`text-left border p-3 transition-colors ${mode === val ? "border-navy bg-navy/[0.03]" : "border-border hover:border-navy/40"}`}>
+                    <div className="font-heading font-semibold text-sm text-navy">{title}</div>
+                    <div className="text-[11px] text-slate2 mt-0.5">{desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Filter source banner */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[11px] font-mono text-slate2">
+                {filterStatus === "loading" && "Loading filter options from the NAAC portal…"}
+                {filterStatus === "ok" && <span className="text-emerald2">Filter options loaded from the live portal.</span>}
+                {filterStatus === "manual" && <span className="text-amber2">Live options unavailable — enter IDs manually.</span>}
+              </div>
+              <button type="button" onClick={loadFilters} className="text-[11px] font-mono uppercase tracking-wider text-emerald2 hover:underline">
+                Reload options
+              </button>
+            </div>
+
             <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Sync Mode">
-                <select value={mode} onChange={(e) => setMode(e.target.value)} className="w-full border border-border px-3 py-2 text-sm font-mono">
-                  <option value="manual">Manual (filtered)</option>
-                  <option value="single">Single Institution</option>
-                  <option value="state">State Sync</option>
-                  <option value="cycle">Cycle Sync</option>
-                </select>
-              </Field>
-              <Field label="Limit (institutions)">
-                <input type="number" value={limit} onChange={(e) => setLimit(e.target.value)} className="w-full border border-border px-3 py-2 text-sm font-mono" />
-              </Field>
               {mode === "single" ? (
                 <Field label="HEI Assessment ID">
-                  <input value={heiId} onChange={(e) => setHeiId(e.target.value)} placeholder="e.g. 16164" className="w-full border border-border px-3 py-2 text-sm font-mono" />
+                  <input value={heiId} onChange={(e) => setHeiId(e.target.value)} placeholder="e.g. 16164"
+                    className="w-full border border-border px-3 py-2 text-sm font-mono" />
                 </Field>
               ) : (
                 <>
-                  <Field label="Institution Type (id)"><input value={instType} onChange={(e) => setInstType(e.target.value)} className="w-full border border-border px-3 py-2 text-sm font-mono" /></Field>
-                  <Field label="State (id)"><input value={stateId} onChange={(e) => setStateId(e.target.value)} className="w-full border border-border px-3 py-2 text-sm font-mono" /></Field>
-                  <Field label="Cycle (id, 0=all)"><input value={cycle} onChange={(e) => setCycle(e.target.value)} className="w-full border border-border px-3 py-2 text-sm font-mono" /></Field>
-                  <Field label="IIQA Status (id)"><input value={iiqaStatus} onChange={(e) => setIiqaStatus(e.target.value)} className="w-full border border-border px-3 py-2 text-sm font-mono" /></Field>
-                  <Field label="Institution Name (search)"><input value={instName} onChange={(e) => setInstName(e.target.value)} className="w-full border border-border px-3 py-2 text-sm" /></Field>
+                  <FilterField label="Institution Type" value={instType} onChange={setInstType}
+                    options={filterOpts?.inst_type} placeholder="All types" manualHint="1 = College · 2 = University" />
+                  <FilterField label="State" value={stateId} onChange={setStateId}
+                    options={filterOpts?.state} placeholder="All states" manualHint="e.g. 5 = Tamil Nadu" highlight={mode === "state"} />
+                  <FilterField label="Cycle" value={cycle} onChange={setCycle}
+                    options={filterOpts?.cycle} placeholder="All cycles" manualHint="0 = all cycles" highlight={mode === "cycle"} />
+                  <FilterField label="IIQA Status" value={iiqaStatus} onChange={setIiqaStatus}
+                    options={filterOpts?.iiqa_status} placeholder="Any status" manualHint="e.g. 5 = Accredited" />
+                  <Field label="Institution Name (search)">
+                    <input value={instName} onChange={(e) => setInstName(e.target.value)} placeholder="optional"
+                      className="w-full border border-border px-3 py-2 text-sm" />
+                  </Field>
                 </>
               )}
+              <Field label="Max institutions">
+                <input type="number" value={limit} onChange={(e) => setLimit(e.target.value)}
+                  className="w-full border border-border px-3 py-2 text-sm font-mono" />
+              </Field>
             </div>
+
             <div className="flex items-center gap-5 mt-4 text-xs font-mono text-slate2">
               <label className="flex items-center gap-2"><input type="checkbox" checked={downloadPdfs} onChange={(e) => setDownloadPdfs(e.target.checked)} /> Download PDFs</label>
               <label className="flex items-center gap-2"><input type="checkbox" checked={extractPdfs} onChange={(e) => setExtractPdfs(e.target.checked)} /> Extract PDFs</label>
@@ -222,7 +276,8 @@ export default function AdminNAAC() {
               className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-navy text-white text-xs font-mono uppercase tracking-wider hover:bg-emerald2 hover:text-navy transition-colors disabled:opacity-50">
               <RefreshCw className={`w-4 h-4 ${busy ? "animate-spin" : ""}`} /> Run Sync
             </button>
-            <p className="mt-3 text-[11px] text-slate2 font-mono">State id 5 = Tamil Nadu · inst_type 2 = University, 1 = College (read exact ids from the NAAC dashboard dropdowns).</p>
+            {filterNote && <p className="mt-3 text-[11px] text-amber2 font-mono">{filterNote}</p>}
+            <p className="mt-2 text-[11px] text-slate2 font-mono">Tip: leave filters blank for a broad discovery, or pick a state to scope the sync. First run? Set a small Max institutions value and turn PDFs off to test discovery quickly.</p>
           </div>
         )}
 
@@ -421,6 +476,29 @@ function Stat({ k, v, sub, danger }) {
 
 function Field({ label, children }) {
   return (<div><div className="text-[9px] uppercase tracking-wider text-slate2 font-mono mb-1">{label}</div>{children}</div>);
+}
+
+function FilterField({ label, value, onChange, options, placeholder, manualHint, highlight }) {
+  // When the portal returned real dropdown options, render a labelled <select>;
+  // otherwise fall back to a manual ID input with a helpful hint.
+  if (options && options.length > 0) {
+    return (
+      <Field label={label}>
+        <select value={value} onChange={(e) => onChange(e.target.value)}
+          className={`w-full border px-3 py-2 text-sm ${highlight ? "border-navy" : "border-border"}`}>
+          <option value="">{placeholder || "All"}</option>
+          {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </Field>
+    );
+  }
+  return (
+    <Field label={`${label} (ID)`}>
+      <input value={value} onChange={(e) => onChange(e.target.value)}
+        className={`w-full border px-3 py-2 text-sm font-mono ${highlight ? "border-navy" : "border-border"}`} />
+      {manualHint && <div className="text-[10px] text-slate2 font-mono mt-1">{manualHint}</div>}
+    </Field>
+  );
 }
 
 function KV({ k, v }) {
