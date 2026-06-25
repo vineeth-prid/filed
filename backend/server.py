@@ -884,6 +884,12 @@ async def admin_aicte_years():
 async def admin_aicte_test_connection(academic_year: Optional[str] = None, category: str = "NRI"):
     """Live, read-only reachability probe of the AICTE endpoint (no data written)."""
     return await aicte_connector.probe(academic_year or aicte_connector.DEFAULT_YEAR, category)
+
+
+@api_router.post("/admin/aicte/renormalize")
+async def admin_aicte_renormalize(academic_year: Optional[str] = None):
+    """Rebuild normalized aicte_records from already-stored raw payloads (no network)."""
+    return await aicte_connector.renormalize(db, academic_year)
 # ----------------- /Data Sources + AICTE -----------------
 
 

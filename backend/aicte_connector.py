@@ -61,12 +61,13 @@ _FIELD_CANDIDATES = {
     "collegename": ["collegename", "college_name", "institute_name", "institutionname", "institution_name", "name", "iname"],
     "state": ["state", "state_name", "statename"],
     "district": ["district", "district_name", "districtname"],
-    "institution_type": ["institution_type", "institutiontype", "institute_type", "type", "itype", "college_type", "ownership"],
+    "institution_type": ["type", "institution_type", "institutiontype", "institute_type", "itype", "college_type", "ownership"],
     "program": ["program", "programme", "prog", "program_name"],
     "university": ["university", "univ", "affiliating_university", "universityname", "university_name"],
-    "course_level": ["course_level", "level", "courselevel", "programlevel", "program_level"],
-    "course_name": ["course_name", "course", "coursename", "branch", "branch_name"],
-    "approved_intake": ["approved_intake", "approvedintake", "intake", "sanctioned_intake", "approved", "total_intake", "totalintake"],
+    "course_level": ["corlevel", "course_level", "level", "courselevel", "programlevel", "program_level"],
+    "course_name": ["corname", "course_name", "course", "coursename", "branch", "branch_name"],
+    "approved_intake": ["intake", "approved_intake", "approvedintake", "sanctioned_intake", "approved", "total_intake", "totalintake"],
+    # Category-specific supernumerary intake (AICTE uses piointake / nriintake / fnintake / ciwgintake).
     "special_intake": ["special_intake", "specialintake", "supernumerary", "supernumerary_intake", "quota_intake", "si"],
 }
 
@@ -94,11 +95,16 @@ def normalize_record(raw: dict, year: str, category: str, raw_payload_id: str) -
     if not isinstance(raw, dict):
         raw = {}
     low = {str(k).strip().lower(): val for k, val in raw.items()}
+    colid_val = _pick(low, _FIELD_CANDIDATES["colid"])
+    # Special intake is category-specific (e.g. piointake, nriintake, fnintake, ciwgintake).
+    cat = (category or "").strip().lower()
+    special_keys = [f"{cat}intake", f"{cat}_intake", "piointake", "nriintake", "fnintake", "ciwgintake",
+                    *_FIELD_CANDIDATES["special_intake"]]
     return {
         "id": str(uuid.uuid4()),
         "academic_year": year,
         "source_category": category,
-        "colid": (str(_pick(low, _FIELD_CANDIDATES["colid"])) if _pick(low, _FIELD_CANDIDATES["colid"]) is not None else None),
+        "colid": (str(colid_val) if colid_val is not None else None),
         "collegename": _pick(low, _FIELD_CANDIDATES["collegename"]),
         "state": _pick(low, _FIELD_CANDIDATES["state"]),
         "district": _pick(low, _FIELD_CANDIDATES["district"]),
@@ -108,7 +114,7 @@ def normalize_record(raw: dict, year: str, category: str, raw_payload_id: str) -
         "course_level": _pick(low, _FIELD_CANDIDATES["course_level"]),
         "course_name": _pick(low, _FIELD_CANDIDATES["course_name"]),
         "approved_intake": _to_int(_pick(low, _FIELD_CANDIDATES["approved_intake"])),
-        "special_intake": _to_int(_pick(low, _FIELD_CANDIDATES["special_intake"])),
+        "special_intake": _to_int(_pick(low, special_keys)),
         "raw_payload_id": raw_payload_id,
         "created_at": _now(),
     }
@@ -309,16 +315,26 @@ async def run_sync(db, run_id: str, year: str, run_type: str = "manual") -> None
             if removed.deleted_count:
                 log(f"  Replaced {removed.deleted_count} prior normalized record(s) for {category} {year}")
 
-            # Step 3-5 — normalize, validate, store
+            # Step 3-5 — normalize, validate, store (batched for performance)
             norm = 0
+            skipped = 0
+            batch: list = []
             for raw in records:
                 rec = normalize_record(raw, year, category, payload_id)
                 # Step 4 — validation: a record must at least have an institution name
                 if not rec.get("collegename"):
-                    errors.append(f"{category}: skipped record with no institution name")
+                    skipped += 1
                     continue
-                await db.aicte_records.insert_one(rec)
-                norm += 1
+                batch.append(rec)
+                if len(batch) >= 1000:
+                    await db.aicte_records.insert_many(batch)
+                    norm += len(batch)
+                    batch = []
+            if batch:
+                await db.aicte_records.insert_many(batch)
+                norm += len(batch)
+            if skipped:
+                errors.append(f"{category}: skipped {skipped} record(s) with no institution name")
             total_norm += norm
             log(f"  Normalized & stored {norm} record(s) for {category}")
 
@@ -358,6 +374,41 @@ async def run_sync(db, run_id: str, year: str, run_type: str = "manual") -> None
             {"source_type": "AICTE"},
             {"$set": {"status": "error", "updated_at": _now()}},
         )
+
+
+async def renormalize(db, academic_year: str | None = None) -> dict:
+    """Rebuild aicte_records from the LATEST stored raw payloads (no network call).
+
+    Lets you re-apply normalization (e.g. after a field-mapping fix) to data that was
+    already fetched. Raw payloads are immutable; only the normalized table is rebuilt.
+    """
+    query: dict = {}
+    if academic_year:
+        query["academic_year"] = academic_year
+    payloads = await db.aicte_raw_payloads.find(query, {"_id": 0}).sort("fetched_at", 1).to_list(100000)
+    # Keep the most recent payload per (year, category) — later entries overwrite earlier.
+    latest: dict = {}
+    for p in payloads:
+        latest[(p["academic_year"], p.get("source_category"))] = p
+
+    total = 0
+    for (year, cat), p in latest.items():
+        await db.aicte_records.delete_many({"academic_year": year, "source_category": cat})
+        batch: list = []
+        for raw in p.get("payload_json", []):
+            rec = normalize_record(raw, year, cat, p["id"])
+            if not rec.get("collegename"):
+                continue
+            batch.append(rec)
+            if len(batch) >= 1000:
+                await db.aicte_records.insert_many(batch)
+                total += len(batch)
+                batch = []
+        if batch:
+            await db.aicte_records.insert_many(batch)
+            total += len(batch)
+    logger.info("AICTE renormalize: rebuilt %d records across %d group(s)", total, len(latest))
+    return {"renormalized": total, "groups": len(latest)}
 
 
 async def overview(db) -> dict:

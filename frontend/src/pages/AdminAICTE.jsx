@@ -111,6 +111,17 @@ export default function AdminAICTE() {
     fetchEndpoints();
   };
 
+  const renormalize = async () => {
+    setBusy(true);
+    try {
+      const { data } = await axios.post(`${API}/admin/aicte/renormalize`, {});
+      window.alert(`Re-normalized ${data.renormalized} record(s) across ${data.groups} group(s) from stored raw payloads.`);
+      fetchOverview(); fetchRecords(); fetchPayloads();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const openPayload = async (p) => {
     const { data } = await axios.get(`${API}/admin/aicte/payloads/${p.id}`);
     setViewPayload(data);
@@ -151,6 +162,11 @@ export default function AdminAICTE() {
             <button data-testid="aicte-sync-btn" disabled={busy} onClick={sync}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-navy text-white text-xs font-mono uppercase tracking-wider hover:bg-emerald2 hover:text-navy transition-colors disabled:opacity-50">
               <RefreshCw className={`w-4 h-4 ${busy ? "animate-spin" : ""}`} /> Manual Sync
+            </button>
+            <button data-testid="aicte-renormalize-btn" disabled={busy} onClick={renormalize}
+              title="Rebuild normalized records from stored raw payloads (no network call)"
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-border text-navy text-xs font-mono uppercase tracking-wider hover:border-navy transition-colors disabled:opacity-50">
+              <ListChecks className="w-4 h-4" /> Re-normalize
             </button>
           </div>
         </div>
