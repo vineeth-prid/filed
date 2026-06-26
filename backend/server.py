@@ -1179,7 +1179,8 @@ app.add_middleware(
 #   Timeout → RequestSizeLimit → SecurityHeaders → CORS → gate_middleware → routes
 app.add_middleware(SecurityHeadersMiddleware, is_production=settings.is_production)
 app.add_middleware(RequestSizeLimitMiddleware, max_bytes=settings.max_request_body_bytes)
-app.add_middleware(TimeoutMiddleware, timeout_seconds=settings.request_timeout_seconds)
+app.add_middleware(TimeoutMiddleware, timeout_seconds=settings.request_timeout_seconds,
+                   llm_timeout_seconds=settings.llm_timeout_seconds)
 app.add_middleware(BotShieldMiddleware)
 app.add_middleware(AntiScrapingMiddleware)
 app.add_middleware(HoneypotMiddleware)

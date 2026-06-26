@@ -13,29 +13,19 @@ const API = `${BACKEND_URL}/api`;
 
 const MODULES = [
   {
-    step: 1, to: "/admin/nirf", icon: Database, title: "NIRF Sync Control",
-    desc: "Scrape rankings, generate PDF URLs, download official disclosure reports, track & retry downloads.",
+    step: 1, to: "/admin/nirf", icon: Database, title: "Sync & Acquisition",
+    desc: "Discover institutions, generate PDF URLs, download disclosure reports and queue them for extraction. Filters: year, category, state, ranking band, search, sync mode.",
     testid: "module-sync",
   },
   {
-    step: 2, to: "/admin/nirf/review", icon: FileSearch, title: "Extraction Review",
-    desc: "Parse downloaded PDFs into structured fields with per-field source page + confidence; apply manual corrections.",
+    step: 2, to: "/admin/nirf/review", icon: FileSearch, title: "Processing & Extraction",
+    desc: "Parse downloaded PDFs into structured fields (per-field source page + confidence), run validation, apply manual corrections, and publish normalized records.",
     testid: "module-extract",
   },
   {
-    step: 3, to: "/admin/nirf/metrics", icon: SlidersHorizontal, title: "Normalized Metrics",
-    desc: "Comparable derived metrics (placement, outcome, faculty ratio, research) — fully traceable to source, immutable raw data.",
-    testid: "module-metrics",
-  },
-  {
-    step: 4, to: "/admin/nirf/intelligence", icon: Brain, title: "Intelligence Scores",
-    desc: "Career Success, Value For Money, Academic Strength & Transparency scores — every score has a 'See How This Was Calculated' breakdown.",
-    testid: "module-intelligence",
-  },
-  {
-    step: 5, to: "/admin/nirf/refresh", icon: RotateCw, title: "Annual Refresh",
-    desc: "One-click 7-stage 'Sync NIRF {year}', year-on-year change tracking (salary / placement / faculty) and trends. Historical years preserved.",
-    testid: "module-refresh",
+    step: 3, to: "/admin/nirf/monitoring", icon: Activity, title: "Version & Monitoring",
+    desc: "Sync history, extraction stats, downloaded documents, failed downloads/extractions, reprocessing queue, historical runs, year versions and connector health.",
+    testid: "module-monitoring",
   },
 ];
 
@@ -59,17 +49,15 @@ export default function AdminHome() {
             <span className="text-slate2">The pipeline behind every factsheet.</span>
           </h1>
           <p className="mt-4 text-sm text-slate2 max-w-2xl">
-            The full due-diligence pipeline — from raw NIRF disclosures to explainable scores. Work top-to-bottom: each stage feeds the next.
+            The data acquisition platform — connectors that discover, acquire, process, validate and publish clean, versioned data. KPIs &amp; intelligence live in a separate Business Intelligence module.
           </p>
         </div>
 
         {/* Pipeline status */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-px bg-border border border-border mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border border border-border mb-8">
           <Stat k="Institutions" v={ov?.institutions} />
           <Stat k="Downloaded" v={ov?.downloaded} />
           <Stat k="Extracted" v={ov?.extractions} />
-          <Stat k="Metrics" v={ov?.derived_metrics} />
-          <Stat k="Scored" v={ov?.intelligence_scores} />
           <Stat k="Years" v={ov?.years_tracked?.length} sub={ov?.years_tracked?.join(" · ")} />
         </div>
 

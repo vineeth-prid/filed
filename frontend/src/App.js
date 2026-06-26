@@ -16,6 +16,7 @@ import AdminExtract from "./pages/AdminExtract";
 import AdminMetrics from "./pages/AdminMetrics";
 import AdminIntelligence from "./pages/AdminIntelligence";
 import AdminRefresh from "./pages/AdminRefresh";
+import AdminNirfMonitoring from "./pages/AdminNirfMonitoring";
 import AdminHome from "./pages/AdminHome";
 import AdminLogin from "./pages/AdminLogin";
 import AdminSources from "./pages/AdminSources";
@@ -47,6 +48,7 @@ function App() {
             <Route path="/admin/nirf/metrics" element={protect(<AdminMetrics />)} />
             <Route path="/admin/nirf/intelligence" element={protect(<AdminIntelligence />)} />
             <Route path="/admin/nirf/refresh" element={protect(<AdminRefresh />)} />
+            <Route path="/admin/nirf/monitoring" element={protect(<AdminNirfMonitoring />)} />
             <Route path="/admin/sources" element={protect(<AdminSources />)} />
             <Route path="/admin/aicte" element={protect(<AdminAICTE />)} />
             <Route path="/admin/naac" element={protect(<AdminNAAC />)} />

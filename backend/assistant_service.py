@@ -87,7 +87,7 @@ async def reply(db, session_id: str, message: str) -> dict:
     msgs.append({"role": "user", "content": message})
 
     try:
-        raw = await chat_with_history(msgs, model=settings.assistant_model, temperature=0.4, num_predict=500)
+        raw = await chat_with_history(msgs, model=settings.assistant_model, temperature=0.4, num_predict=350)
         answer = _strip_think(raw) or "Sorry, I couldn't generate a response just now. Could you rephrase?"
         ok = True
     except OllamaError as e:

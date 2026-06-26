@@ -46,7 +46,7 @@ export default function AssistantWidget() {
     setMessages((m) => [...m, { role: "user", content: text }]);
     setBusy(true);
     try {
-      const { data } = await axios.post(`${API}/assistant/chat`, { session_id: sid, message: text });
+      const { data } = await axios.post(`${API}/assistant/chat`, { session_id: sid, message: text }, { timeout: 170000 });
       setMessages((m) => [...m, { role: "assistant", content: data.reply }]);
       if (data.suggest_lead && !leadSent) setShowLead(true);
     } catch (e) {

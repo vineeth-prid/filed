@@ -113,18 +113,26 @@ import asyncio
 
 
 class TimeoutMiddleware(BaseHTTPMiddleware):
-    """Kill requests that exceed the configured timeout (default 30 s)."""
+    """Kill requests that exceed the configured timeout (default 30 s).
 
-    def __init__(self, app, timeout_seconds: int = 30):
+    LLM-backed endpoints (local Ollama generation) are slow on CPU, so they get a
+    longer budget (`llm_timeout_seconds`) to avoid premature 504s on the assistant."""
+
+    def __init__(self, app, timeout_seconds: int = 30, llm_timeout_seconds: int = 150,
+                 llm_path_prefixes: tuple = ("/api/assistant", "/api/insights")):
         super().__init__(app)
         self._timeout = timeout_seconds
+        self._llm_timeout = llm_timeout_seconds
+        self._llm_prefixes = llm_path_prefixes
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        path = request.url.path
+        timeout = self._llm_timeout if any(path.startswith(p) for p in self._llm_prefixes) else self._timeout
         try:
-            return await asyncio.wait_for(call_next(request), timeout=self._timeout)
+            return await asyncio.wait_for(call_next(request), timeout=timeout)
         except asyncio.TimeoutError:
-            logger.warning("Request timeout: %s %s from %s",
-                           request.method, request.url.path, client_ip(request))
+            logger.warning("Request timeout (%ss): %s %s from %s",
+                           timeout, request.method, request.url.path, client_ip(request))
             return JSONResponse(
                 status_code=504,
                 content={"detail": "Request timed out."},

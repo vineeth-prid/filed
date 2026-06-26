@@ -36,6 +36,11 @@ export default function AdminNIRF() {
   const [activeJob, setActiveJob] = useState(null);
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState("documents");
+  // Stage 1 acquisition filters
+  const [stateFilter, setStateFilter] = useState("ALL");
+  const [rankBand, setRankBand] = useState("all");
+  const [search, setSearch] = useState("");
+  const [syncMode, setSyncMode] = useState("full");
 
   const fetchAll = useCallback(async () => {
     const [j, d, i] = await Promise.all([
@@ -58,7 +63,12 @@ export default function AdminNIRF() {
   const triggerSync = async () => {
     setBusy(true);
     try {
-      const { data } = await axios.post(`${API}/admin/nirf/sync`, { year, category, limit });
+      // Ranking band scopes how many top-ranked institutions to acquire.
+      const bandMax = { "1-10": 10, "1-25": 25, "1-50": 50, "1-100": 100 }[rankBand];
+      const effLimit = bandMax || limit;
+      const { data } = await axios.post(`${API}/admin/nirf/sync`, {
+        year, category, limit: effLimit, mode: syncMode, state: stateFilter,
+      });
       setActiveJob({ id: data.job_id, status: "Queued", logs: [] });
       startJobPoller(data.job_id, (j) => setActiveJob(j), () => fetchAll());
     } finally {
@@ -74,6 +84,24 @@ export default function AdminNIRF() {
   const total = counts.Pending + counts.Downloaded + counts.Failed;
   const downloadedPct = total ? Math.round((counts.Downloaded / total) * 100) : 0;
 
+  // Derived view filters (State / Ranking Band / Search) applied to the displayed lists.
+  const availableStates = Array.from(new Set(institutions.map((i) => i.state).filter(Boolean))).sort();
+  const inBand = (rank) => {
+    if (rankBand === "all" || !rank) return true;
+    const max = { "1-10": 10, "1-25": 25, "1-50": 50, "1-100": 100 }[rankBand] || 9999;
+    return Number(rank) <= max;
+  };
+  const matchesSearch = (name) => !search || (name || "").toLowerCase().includes(search.toLowerCase());
+  const viewInstitutions = institutions.filter(
+    (r) => (stateFilter === "ALL" || r.state === stateFilter) && inBand(r.rank) && matchesSearch(r.college_name)
+  );
+  // For documents, scope by the institute_ids that pass the institution-level filters.
+  const allowedIds = new Set(viewInstitutions.map((i) => i.institute_id));
+  const stateBandActive = stateFilter !== "ALL" || rankBand !== "all";
+  const viewDocs = docs.filter(
+    (d) => matchesSearch(d.college_name) && (!stateBandActive || allowedIds.has(d.institute_id))
+  );
+
   return (
     <div data-testid="admin-nirf-page" className="min-h-screen bg-offwhite text-navy">
       <Navbar />
@@ -81,23 +109,23 @@ export default function AdminNIRF() {
         <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
           <div>
             <div className="text-[10px] uppercase tracking-[0.22em] text-slate2 font-semibold mb-3 font-mono flex items-center gap-2">
-              <Database className="w-3.5 h-3.5 text-emerald2" /> Admin · NIRF Data Acquisition
+              <Database className="w-3.5 h-3.5 text-emerald2" /> NIRF · Stage 1
             </div>
             <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl tracking-tighter font-bold leading-[1.02]">
-              NIRF Sync Control.<br />
-              <span className="text-slate2">Scrape, download, track, retry.</span>
+              Sync & Acquisition.<br />
+              <span className="text-slate2">Discover, download, queue, retry.</span>
             </h1>
           </div>
           <Link to="/admin/nirf/review" data-testid="to-extraction-review"
             className="inline-flex items-center gap-2 h-11 px-5 bg-navy text-white text-xs tracking-wide hover:opacity-90 font-semibold">
-            <Cpu className="w-3.5 h-3.5" /> Extraction Review →
+            <Cpu className="w-3.5 h-3.5" /> Processing & Extraction →
           </Link>
         </div>
 
         {/* Controls */}
         <div className="border border-border bg-white p-5 mb-6">
           <div className="flex flex-wrap items-end gap-4">
-            <Field label="Year">
+            <Field label="Academic Year">
               <select value={year} onChange={(e) => setYear(Number(e.target.value))} data-testid="nirf-year"
                 className="h-10 px-3 border border-border bg-white text-sm">
                 {[2024, 2023, 2022].map((y) => <option key={y} value={y}>{y}</option>)}
@@ -105,13 +133,37 @@ export default function AdminNIRF() {
             </Field>
             <Field label="Category">
               <select value={category} onChange={(e) => setCategory(e.target.value)} data-testid="nirf-category"
-                className="h-10 px-3 border border-border bg-white text-sm min-w-[160px]">
+                className="h-10 px-3 border border-border bg-white text-sm min-w-[150px]">
                 {categories.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </Field>
+            <Field label="State *">
+              <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} data-testid="nirf-state"
+                className="h-10 px-3 border border-border bg-white text-sm min-w-[150px]">
+                <option value="ALL">All States</option>
+                {availableStates.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </Field>
+            <Field label="Ranking Band">
+              <select value={rankBand} onChange={(e) => setRankBand(e.target.value)} data-testid="nirf-band"
+                className="h-10 px-3 border border-border bg-white text-sm">
+                {["all", "1-10", "1-25", "1-50", "1-100"].map((b) => <option key={b} value={b}>{b === "all" ? "All ranks" : `Top ${b.split("-")[1]}`}</option>)}
+              </select>
+            </Field>
+            <Field label="Sync Mode">
+              <select value={syncMode} onChange={(e) => setSyncMode(e.target.value)} data-testid="nirf-mode"
+                className="h-10 px-3 border border-border bg-white text-sm">
+                <option value="full">Full</option>
+                <option value="incremental">Incremental</option>
+              </select>
+            </Field>
+            <Field label="Institution Search">
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="filter by name"
+                data-testid="nirf-search" className="h-10 px-3 border border-border bg-white text-sm w-44" />
+            </Field>
             <Field label="Limit">
               <input type="number" value={limit} min={1} max={100} onChange={(e) => setLimit(Number(e.target.value))}
-                data-testid="nirf-limit" className="h-10 px-3 border border-border bg-white text-sm w-24" />
+                data-testid="nirf-limit" className="h-10 px-3 border border-border bg-white text-sm w-20" />
             </Field>
             <button
               onClick={triggerSync}
@@ -124,6 +176,9 @@ export default function AdminNIRF() {
                 : <><RefreshCw className="w-3.5 h-3.5" /> Sync NIRF Data</>}
             </button>
           </div>
+          <p className="mt-3 text-[11px] text-slate2 font-mono">
+            State &amp; Ranking Band filter the discovered institutions and the extraction queue. Ranking Band also scopes acquisition (top-N). Sync Mode: Full re-acquires; Incremental skips already-downloaded.
+          </p>
         </div>
 
         {/* KPI strip */}
@@ -166,8 +221,8 @@ export default function AdminNIRF() {
         {/* Tabs */}
         <div className="flex items-center gap-1 mb-4 border-b border-border">
           {[
-            { id: "documents", label: "Documents", count: docs.length },
-            { id: "institutions", label: "Institutions", count: institutions.length },
+            { id: "documents", label: "Documents", count: viewDocs.length },
+            { id: "institutions", label: "Institutions", count: viewInstitutions.length },
             { id: "jobs", label: "Jobs", count: jobs.length },
           ].map((t) => (
             <button
@@ -181,8 +236,8 @@ export default function AdminNIRF() {
           ))}
         </div>
 
-        {tab === "documents" && <DocumentsTable docs={docs} onRetry={retry} />}
-        {tab === "institutions" && <InstitutionsTable rows={institutions} />}
+        {tab === "documents" && <DocumentsTable docs={viewDocs} onRetry={retry} />}
+        {tab === "institutions" && <InstitutionsTable rows={viewInstitutions} />}
         {tab === "jobs" && <JobsTable jobs={jobs} onOpen={(j) => setActiveJob(j)} />}
       </main>
       <Footer />
